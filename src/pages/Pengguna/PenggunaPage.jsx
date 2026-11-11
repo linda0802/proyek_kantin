@@ -12,6 +12,10 @@ const EMPTY_FORM = {
   username: '',
   password: '',
   role: 'kasir',
+  permissions: {
+    hutang: true,
+    titipan: true,
+  },
 }
 
 export default function PenggunaPage() {
@@ -68,6 +72,10 @@ export default function PenggunaPage() {
       username: u.username,
       password: '', // Kosongkan agar tidak wajib diubah
       role: u.role,
+      permissions: {
+        hutang: u.role === 'admin' ? true : (u.permissions?.hutang ?? true),
+        titipan: u.role === 'admin' ? true : (u.permissions?.titipan ?? true),
+      },
     })
     setErrors({})
     setIsModalOpen(true)
@@ -92,13 +100,14 @@ export default function PenggunaPage() {
 
     setSaving(true)
     try {
-      await new Promise(r => setTimeout(r, 400))
+      await new Promise(r => setTimeout(r, 300))
 
       if (editingUser) {
         const payload = {
           name: form.name,
           username: form.username,
           role: form.role,
+          permissions: form.role === 'admin' ? { hutang: true, titipan: true } : form.permissions,
         }
         if (form.password.trim()) payload.password = form.password.trim()
 
@@ -121,6 +130,25 @@ export default function PenggunaPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Toggle Quick Permission dari Tabel
+  const handleQuickTogglePermission = (u, permKey) => {
+    if (u.role === 'admin') return // Admin selalu full
+    const currentVal = !!u.permissions?.[permKey]
+    const nextVal = !currentVal
+    const nextPerms = {
+      hutang: u.permissions?.hutang ?? true,
+      titipan: u.permissions?.titipan ?? true,
+      [permKey]: nextVal,
+    }
+
+    editUser(u.id, { permissions: nextPerms })
+    addToast({
+      type: 'info',
+      title: 'Izin Diperbarui',
+      message: `Fitur ${permKey.toUpperCase()} untuk ${u.name} sekarang: ${nextVal ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'}.`,
+    })
   }
 
   // Toggle Status
@@ -152,11 +180,11 @@ export default function PenggunaPage() {
       <div className="pengguna-header">
         <div>
           <div className="pengguna-header-title-row">
-            <h1 className="page-title">Manajemen Pengguna</h1>
+            <h1 className="page-title">Manajemen Pengguna & Izin Akses</h1>
             <Badge variant="primary" dot>{metrics.total} Pengguna</Badge>
           </div>
           <p className="page-subtitle">
-            Kelola akun petugas kasir dan administrator sistem kasir kantin.
+            Kelola akun petugas kasir, admin, dan tentukan izin fitur khusus (Hutang/Kasbon & Titipan) per pengguna.
           </p>
         </div>
 
@@ -216,15 +244,19 @@ export default function PenggunaPage() {
                 <th>Pengguna</th>
                 <th>Username</th>
                 <th style={{ textAlign: 'center' }}>Role / Hak Akses</th>
+                <th style={{ textAlign: 'center' }}>Izin Fitur (Per Akun)</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th>Terakhir Login</th>
-                <th style={{ textAlign: 'center', width: '150px' }}>Aksi</th>
+                <th style={{ textAlign: 'center', width: '130px' }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
               {filteredUsers.map((u, idx) => {
                 const isCurrentUser = user?.id === u.id
                 const isAktif = u.status === 'aktif'
+                const isUserAdmin = u.role === 'admin'
+                const hutangAktif = isUserAdmin || u.permissions?.hutang
+                const titipanAktif = isUserAdmin || u.permissions?.titipan
 
                 return (
                   <tr key={u.id}>
@@ -232,7 +264,7 @@ export default function PenggunaPage() {
                     <td>
                       <div className="user-profile-cell">
                         <div className="user-avatar" aria-hidden="true">
-                          {u.role === 'admin' ? '🛡️' : '👤'}
+                          {isUserAdmin ? '🛡️' : '👤'}
                         </div>
                         <div>
                           <div className="user-name">
@@ -246,9 +278,35 @@ export default function PenggunaPage() {
                       <span className="username-text">@{u.username}</span>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <Badge variant={u.role === 'admin' ? 'primary' : 'info'}>
-                        {u.role === 'admin' ? '🛡️ Administrator' : '🛒 Kasir'}
+                      <Badge variant={isUserAdmin ? 'primary' : 'info'}>
+                        {isUserAdmin ? '🛡️ Administrator' : '🛒 Kasir'}
                       </Badge>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {isUserAdmin ? (
+                        <span className="perm-badge-admin" title="Admin memiliki akses penuh ke semua fitur">
+                          ⭐ Akses Penuh
+                        </span>
+                      ) : (
+                        <div className="perm-pills-row">
+                          <button
+                            type="button"
+                            className={`perm-pill ${hutangAktif ? 'perm-on' : 'perm-off'}`}
+                            onClick={() => handleQuickTogglePermission(u, 'hutang')}
+                            title={`Klik untuk ubah izin Kasbon/Hutang (Saat ini: ${hutangAktif ? 'ON' : 'OFF'})`}
+                          >
+                            📝 Hutang: {hutangAktif ? 'ON' : 'OFF'}
+                          </button>
+                          <button
+                            type="button"
+                            className={`perm-pill ${titipanAktif ? 'perm-on' : 'perm-off'}`}
+                            onClick={() => handleQuickTogglePermission(u, 'titipan')}
+                            title={`Klik untuk ubah izin Barang Titipan (Saat ini: ${titipanAktif ? 'ON' : 'OFF'})`}
+                          >
+                            🤝 Titipan: {titipanAktif ? 'ON' : 'OFF'}
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <button
@@ -274,7 +332,7 @@ export default function PenggunaPage() {
                           size="sm"
                           icon
                           onClick={() => handleOpenEdit(u)}
-                          title="Edit Pengguna"
+                          title="Edit Pengguna & Izin"
                           id={`btn-edit-user-${u.id}`}
                         >
                           ✏️
@@ -302,11 +360,11 @@ export default function PenggunaPage() {
         </div>
       </div>
 
-      {/* ── Modal Tambah / Edit ── */}
+      {/* ── Modal Form Tambah / Edit Pengguna ── */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingUser ? `✏️ Edit Pengguna: ${editingUser.name}` : '➕ Tambah Pengguna Baru'}
+        title={editingUser ? '✏️ Edit Pengguna & Izin Akses' : '➕ Tambah Pengguna Baru'}
         size="md"
         id="modal-pengguna-form"
         footer={
@@ -379,9 +437,63 @@ export default function PenggunaPage() {
               onChange={e => setForm(prev => ({ ...prev, role: e.target.value }))}
               id="select-user-role"
             >
-              <option value="kasir">🛒 Kasir (Hanya Akses POS, Produk & Transaksi)</option>
-              <option value="admin">🛡️ Administrator (Akses Penuh Seluruh Modul & Pengaturan)</option>
+              <option value="kasir">🛒 Kasir (Dapat disesuaikan izin fitur)</option>
+              <option value="admin">🛡️ Administrator (Akses Penuh Seluruh Modul)</option>
             </Select>
+          </div>
+
+          {/* ── Izin Fitur Opsional Per Pengguna ── */}
+          <div className="form-perm-section">
+            <label className="form-perm-title">Pengaturan Izin Fitur Opsional</label>
+            <p className="form-perm-desc">
+              Tentukan fitur yang diizinkan untuk akun kasir ini secara individual:
+            </p>
+
+            {form.role === 'admin' ? (
+              <div className="admin-perm-notice">
+                ℹ️ <strong>Administrator memiliki akses penuh</strong> ke seluruh fitur sistem termasuk Hutang/Kasbon dan Barang Titipan.
+              </div>
+            ) : (
+              <div className="perm-toggle-list">
+                <label className="perm-checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={!!form.permissions?.hutang}
+                    onChange={e =>
+                      setForm(prev => ({
+                        ...prev,
+                        permissions: { ...prev.permissions, hutang: e.target.checked },
+                      }))
+                    }
+                  />
+                  <div>
+                    <div className="perm-item-name">📝 Fitur Hutang / Kasbon</div>
+                    <div className="perm-item-desc">
+                      Jika aktif (ON), kasir dapat memilih metode pembayaran Kasbon dan transaksi otomatis tercatat ke Catatan Hutang. Jika nonaktif (OFF), kasir hanya dapat memproses Tunai dan Non-Tunai.
+                    </div>
+                  </div>
+                </label>
+
+                <label className="perm-checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={!!form.permissions?.titipan}
+                    onChange={e =>
+                      setForm(prev => ({
+                        ...prev,
+                        permissions: { ...prev.permissions, titipan: e.target.checked },
+                      }))
+                    }
+                  />
+                  <div>
+                    <div className="perm-item-name">🤝 Fitur Barang Titipan (Konsinyasi)</div>
+                    <div className="perm-item-desc">
+                      Jika aktif (ON), kasir dapat melihat dan menjual produk titipan di kasir POS serta mengakses menu Barang Titipan. Jika nonaktif (OFF), menu dan produk titipan disembunyikan dari akun ini.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
         </div>
       </Modal>
@@ -391,27 +503,22 @@ export default function PenggunaPage() {
         isOpen={!!deletingUser}
         onClose={() => setDeletingUser(null)}
         onConfirm={handleConfirmHapus}
-        title="Hapus Pengguna?"
-        message={`Apakah Anda yakin ingin menghapus akun pengguna "${deletingUser?.name}" (@${deletingUser?.username})? Tindakan ini tidak dapat dibatalkan.`}
-        confirmText="Ya, Hapus Pengguna"
-        cancelText="Batal"
-        variant="danger"
+        title="Hapus Pengguna"
+        message={`Apakah Anda yakin ingin menghapus akun "${deletingUser?.name}" (@${deletingUser?.username})? Tindakan ini tidak dapat dibatalkan.`}
+        confirmLabel="Ya, Hapus Pengguna"
+        confirmVariant="danger"
       />
 
-      {/* ── Scoped Styling ── */}
       <style>{`
         .pengguna-page {
           display: flex;
           flex-direction: column;
           gap: var(--space-6);
         }
-
-        /* Header */
         .pengguna-header {
           display: flex;
-          align-items: flex-start;
           justify-content: space-between;
-          flex-wrap: wrap;
+          align-items: flex-start;
           gap: var(--space-4);
         }
         .pengguna-header-title-row {
@@ -420,32 +527,22 @@ export default function PenggunaPage() {
           gap: var(--space-3);
           margin-bottom: var(--space-1);
         }
-        .pengguna-header-actions {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-        }
 
-        /* KPI Cards */
+        /* Stats Grid */
         .pengguna-stats-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: var(--space-4);
         }
         .pengguna-stat-card {
           background: var(--color-surface);
           border: 1px solid var(--color-border);
           border-radius: var(--radius-xl);
-          padding: var(--space-5);
+          padding: var(--space-4);
           display: flex;
           align-items: center;
           gap: var(--space-4);
           box-shadow: var(--shadow-sm);
-          transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-        }
-        .pengguna-stat-card:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-md);
         }
         .pengguna-stat-icon {
           width: 48px;
@@ -454,49 +551,43 @@ export default function PenggunaPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 1.4rem;
+          font-size: 1.5rem;
           flex-shrink: 0;
         }
         .stat-icon--primary { background: var(--color-primary-subtle); color: var(--color-primary); }
         .stat-icon--purple { background: #f5f3ff; color: #7c3aed; }
         .stat-icon--teal { background: #f0fdfa; color: #0d9488; }
-        .stat-icon--success { background: #ecfdf5; color: #059669; }
+        .stat-icon--success { background: var(--color-success-bg); color: var(--color-success); }
+
         .pengguna-stat-content { flex: 1; min-width: 0; }
         .pengguna-stat-label {
           font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-semibold);
           color: var(--color-text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-bottom: 2px;
+          font-weight: var(--font-weight-medium);
         }
         .pengguna-stat-value {
           font-size: var(--font-size-2xl);
-          font-weight: var(--font-weight-extrabold);
+          font-weight: var(--font-weight-bold);
           color: var(--color-text-primary);
-          line-height: var(--line-height-tight);
+          line-height: 1.2;
         }
         .pengguna-stat-sub {
           font-size: var(--font-size-xs);
           color: var(--color-text-muted);
-          margin-top: 2px;
         }
 
         /* Table Card */
-        .table-card { padding: 0; overflow: hidden; }
-        .table-responsive { overflow-x: auto; }
         .pengguna-table {
           width: 100%;
           border-collapse: collapse;
           font-size: var(--font-size-sm);
         }
         .pengguna-table th {
-          background: var(--color-surface-sunken);
-          color: var(--color-text-muted);
+          text-align: left;
           font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-bold);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
+          font-weight: var(--font-weight-semibold);
+          color: var(--color-text-muted);
+          background: var(--color-surface-sunken);
           padding: var(--space-3) var(--space-4);
           border-bottom: 1px solid var(--color-border);
           white-space: nowrap;
@@ -538,6 +629,49 @@ export default function PenggunaPage() {
         }
         .user-id-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); }
         .username-text { font-family: monospace; color: var(--color-text-primary); }
+
+        /* Permission Pills in Table */
+        .perm-pills-row {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          align-items: center;
+        }
+        .perm-pill {
+          border: none;
+          padding: 2px 8px;
+          border-radius: var(--radius-full);
+          font-size: 11px;
+          font-weight: var(--font-weight-semibold);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .perm-on {
+          background: #ecfdf5;
+          color: #047857;
+          border: 1px solid #a7f3d0;
+        }
+        .perm-on:hover {
+          background: #d1fae5;
+        }
+        .perm-off {
+          background: #f1f5f9;
+          color: #64748b;
+          border: 1px solid #cbd5e1;
+        }
+        .perm-off:hover {
+          background: #e2e8f0;
+        }
+        .perm-badge-admin {
+          display: inline-block;
+          font-size: 11px;
+          font-weight: var(--font-weight-semibold);
+          color: #6d28d9;
+          background: #f5f3ff;
+          border: 1px solid #ddd6fe;
+          padding: 2px 8px;
+          border-radius: var(--radius-full);
+        }
 
         .status-pill {
           display: inline-flex;
@@ -590,6 +724,66 @@ export default function PenggunaPage() {
           border-radius: var(--radius-md);
           font-size: var(--font-size-xs);
           margin-bottom: var(--space-3);
+        }
+
+        /* Form Permissions Section */
+        .form-perm-section {
+          margin-top: var(--space-4);
+          padding-top: var(--space-4);
+          border-top: 1px solid var(--color-border);
+        }
+        .form-perm-title {
+          font-size: var(--font-size-sm);
+          font-weight: var(--font-weight-semibold);
+          color: var(--color-text-primary);
+          display: block;
+          margin-bottom: 2px;
+        }
+        .form-perm-desc {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-muted);
+          margin-bottom: var(--space-3);
+        }
+        .admin-perm-notice {
+          background: #f5f3ff;
+          border: 1px solid #ddd6fe;
+          color: #5b21b6;
+          border-radius: var(--radius-md);
+          padding: var(--space-3);
+          font-size: var(--font-size-xs);
+        }
+        .perm-toggle-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+        }
+        .perm-checkbox-item {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--space-3);
+          padding: var(--space-3);
+          background: var(--color-surface-sunken);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          cursor: pointer;
+        }
+        .perm-checkbox-item input[type="checkbox"] {
+          margin-top: 3px;
+          cursor: pointer;
+          width: 16px;
+          height: 16px;
+          accent-color: var(--color-primary);
+        }
+        .perm-item-name {
+          font-size: var(--font-size-sm);
+          font-weight: var(--font-weight-semibold);
+          color: var(--color-text-primary);
+        }
+        .perm-item-desc {
+          font-size: 11px;
+          color: var(--color-text-muted);
+          margin-top: 2px;
+          line-height: 1.4;
         }
       `}</style>
     </div>

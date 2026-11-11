@@ -7,51 +7,60 @@ const INITIAL_USERS = [
     id: 1,
     name: 'Admin KantinKu',
     username: 'admin',
-    password: 'password', // or admin123
+    password: 'admin123',
     role: 'admin',
     status: 'aktif',
-    terakhirLogin: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    name: 'Siti Kasir',
-    username: 'kasir',
-    password: 'password', // or kasir123
-    role: 'kasir',
-    status: 'aktif',
-    terakhirLogin: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    name: 'Budi Santoso',
-    username: 'budi',
-    password: 'password',
-    role: 'kasir',
-    status: 'aktif',
-    terakhirLogin: new Date(Date.now() - 86400000).toISOString(),
+    permissions: {
+      hutang: true,
+      titipan: true,
+    },
+    terakhirLogin: null,
   },
 ]
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('kantinku_user')
-      return saved ? JSON.parse(saved) : null
-    } catch {
-      return null
-    }
-  })
-
   const [usersList, setUsersList] = useState(() => {
     try {
       const saved = localStorage.getItem(USERS_STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Jika data lama adalah data dummy (ada user 'kasir' atau 'budi'), bersihkan
+          const isDummy = parsed.some(u => u.username === 'kasir' || u.username === 'budi')
+          if (isDummy) {
+            localStorage.removeItem(USERS_STORAGE_KEY)
+            return INITIAL_USERS
+          }
+          // Pastikan setiap user memiliki struktur permissions lengkap
+          return parsed.map(u => ({
+            ...u,
+            permissions: {
+              hutang: u.role === 'admin' ? true : (u.permissions?.hutang ?? true),
+              titipan: u.role === 'admin' ? true : (u.permissions?.titipan ?? true),
+            },
+          }))
+        }
+      }
     } catch (e) {
       console.error('Error loading users:', e)
     }
     return INITIAL_USERS
+  })
+
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kantinku_user')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // Refresh permissions dari usersList jika ada
+        return parsed
+      }
+    } catch {
+      return null
+    }
+    return null
   })
 
   const [loading, setLoading] = useState(false)
@@ -65,18 +74,31 @@ export function AuthProvider({ children }) {
     }
   }, [usersList])
 
+  // Sinkronkan state user yang sedang login jika datanya di usersList berubah
+  useEffect(() => {
+    if (user) {
+      const currentInList = usersList.find(u => u.id === user.id)
+      if (currentInList) {
+        const { password: _, ...safeUser } = currentInList
+        // Cek jika permissions atau nama atau role berubah
+        if (JSON.stringify(safeUser) !== JSON.stringify(user)) {
+          setUser(safeUser)
+          localStorage.setItem('kantinku_user', JSON.stringify(safeUser))
+        }
+      }
+    }
+  }, [usersList, user])
+
   const login = async ({ username, password }) => {
     setLoading(true)
     setError(null)
     try {
-      await new Promise(r => setTimeout(r, 400))
+      await new Promise(r => setTimeout(r, 300))
 
       const found = usersList.find(
         u =>
           u.username.toLowerCase() === username.trim().toLowerCase() &&
-          (u.password === password ||
-            (u.username === 'admin' && (password === 'admin123' || password === 'password')) ||
-            (u.username === 'kasir' && (password === 'kasir123' || password === 'password')))
+          u.password === password
       )
 
       if (!found) {
@@ -118,13 +140,18 @@ export function AuthProvider({ children }) {
 
     setUsersList(prev => {
       const maxId = prev.reduce((m, u) => Math.max(m, u.id), 0)
+      const role = userData.role || 'kasir'
       const newUser = {
         id: maxId + 1,
         name: userData.name.trim(),
         username: userData.username.trim().toLowerCase(),
         password: userData.password || 'password',
-        role: userData.role || 'kasir',
+        role,
         status: 'aktif',
+        permissions: {
+          hutang: role === 'admin' ? true : !!userData.permissions?.hutang,
+          titipan: role === 'admin' ? true : !!userData.permissions?.titipan,
+        },
         terakhirLogin: null,
       }
       return [...prev, newUser]
@@ -148,23 +175,20 @@ export function AuthProvider({ children }) {
           if (updates.name) next.name = updates.name.trim()
           if (updates.username) next.username = updates.username.trim().toLowerCase()
           if (updates.password && updates.password.trim()) next.password = updates.password.trim()
+          if (updates.permissions) {
+            next.permissions = {
+              hutang: next.role === 'admin' ? true : !!updates.permissions.hutang,
+              titipan: next.role === 'admin' ? true : !!updates.permissions.titipan,
+            }
+          }
           return next
         }
         return u
       })
     )
 
-    // Jika yang diedit adalah user yang sedang login, update safeUser di state
-    if (user && user.id === id) {
-      setUser(prev => ({
-        ...prev,
-        name: updates.name ? updates.name.trim() : prev.name,
-        role: updates.role || prev.role,
-      }))
-    }
-
     return { error: null }
-  }, [usersList, user])
+  }, [usersList])
 
   const hapusUser = useCallback((id) => {
     if (user && user.id === id) {
@@ -188,6 +212,13 @@ export function AuthProvider({ children }) {
     return { error: null }
   }, [user])
 
+  // Cek izin fitur per user (Admin selalu lolos)
+  const hasPermission = useCallback((featureName) => {
+    if (!user) return false
+    if (user.role === 'admin') return true
+    return !!user.permissions?.[featureName]
+  }, [user])
+
   const isAdmin = user?.role === 'admin'
   const isKasir = user?.role === 'kasir'
   const isAuthenticated = !!user
@@ -204,6 +235,7 @@ export function AuthProvider({ children }) {
         isAdmin,
         isKasir,
         isAuthenticated,
+        hasPermission,
         // CRUD User
         tambahUser,
         editUser,

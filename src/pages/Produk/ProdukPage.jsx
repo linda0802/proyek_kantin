@@ -44,8 +44,8 @@ export default function ProdukPage() {
     const total = produkList.length
     const tersedia = produkList.filter(p => p.status === 'tersedia' && p.stok > 0).length
     const habisAtauKritis = produkList.filter(p => p.status === 'habis' || p.stok <= 5).length
-    const totalNilaiAset = produkList.reduce((sum, p) => sum + (p.stok * p.hargaModal), 0)
-    return { total, tersedia, habisAtauKritis, totalNilaiAset }
+    const totalUnit = produkList.reduce((sum, p) => sum + p.stok, 0)
+    return { total, tersedia, habisAtauKritis, totalUnit }
   }, [produkList])
 
   // Filtered & Sorted Products
@@ -81,11 +81,6 @@ export default function ProdukPage() {
             return b.stok - a.stok
           case 'stok-asc':
             return a.stok - b.stok
-          case 'laba-desc': {
-            const labaA = a.hargaJual - a.hargaModal
-            const labaB = b.hargaJual - b.hargaModal
-            return labaB - labaA
-          }
           default:
             return 0
         }
@@ -159,7 +154,7 @@ export default function ProdukPage() {
             <Badge variant="primary" dot>{metrics.total} Produk</Badge>
           </div>
           <p className="page-subtitle">
-            Kelola katalog menu, harga jual, estimasi laba, stok, dan klasifikasi kategori kantin.
+            Kelola katalog menu, harga jual, stok fisik, dan klasifikasi kategori kantin sekolah.
           </p>
         </div>
 
@@ -215,13 +210,13 @@ export default function ProdukPage() {
         </div>
 
         <div className="produk-stat-card">
-          <div className="produk-stat-icon produk-stat-icon--info" aria-hidden="true">💰</div>
+          <div className="produk-stat-icon produk-stat-icon--info" aria-hidden="true">📊</div>
           <div className="produk-stat-content">
-            <div className="produk-stat-label">Total Nilai Aset Stok</div>
+            <div className="produk-stat-label">Total Stok Fisik</div>
             <div className="produk-stat-value" style={{ fontSize: 'var(--font-size-xl)' }}>
-              {formatRupiah(metrics.totalNilaiAset)}
+              {formatNumber(metrics.totalUnit)} Unit
             </div>
-            <div className="produk-stat-sub">Berdasarkan harga modal</div>
+            <div className="produk-stat-sub">Stok keseluruhan produk</div>
           </div>
         </div>
       </div>

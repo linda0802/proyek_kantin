@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { useCart, useTransaksi } from '../../hooks/useCart'
+import { useHutang } from '../../context/HutangContext'
+import { useProduk } from '../../context/ProdukContext'
+import { useTitipan } from '../../context/TitipanContext'
 import { ConfirmDialog } from '../../components/ui/Modal'
 import ProductGrid from './ProductGrid'
 import Cart from './Cart'
@@ -11,31 +14,60 @@ export default function POSPage() {
   const { user } = useAuth()
   const { addToast } = useToast()
   const { simpanTransaksi } = useTransaksi()
+  const { tambahHutang } = useHutang()
+  const { kurangiStokPenjualan } = useProduk()
+  const { kurangiStokTitipan } = useTitipan()
   const {
     items, tambahItem, kurangiItem, hapusItem, kosongkanKeranjang,
     subTotal, totalItem, isEmpty,
   } = useCart()
 
   const [loading, setLoading] = useState(false)
-  const [transaksiSelesai, setTransaksiSelesai] = useState(null) // data struk
+  const [transaksiSelesai, setTransaksiSelesai] = useState(null)
   const [showReceipt, setShowReceipt] = useState(false)
   const [showKosongkanConfirm, setShowKosongkanConfirm] = useState(false)
 
-  const handleBayar = async ({ metode, uangDiterima }) => {
+  const handleBayar = async ({ metode, uangDiterima, pelanggan }) => {
     setLoading(true)
     try {
-      // Simulasi proses
       await new Promise(r => setTimeout(r, 700))
+
+      // Simpan transaksi
       const transaksi = simpanTransaksi({
         items,
         total: subTotal,
         metodePembayaran: metode,
         uangDiterima,
         kasir: user?.name ?? 'Kasir',
+        pelanggan: metode === 'kasbon' ? pelanggan : null,
       })
+
+      // Kurangi stok produk kantin (hanya produk kantin asli)
+      kurangiStokPenjualan(items, transaksi.id, user?.name)
+
+      // Kurangi stok produk titipan (hanya produk titipan, tidak sentuh stok kantin)
+      items.forEach(item => {
+        if (item.produk?.isTitipan && item.produk?.titipanId) {
+          kurangiStokTitipan(item.produk.titipanId, item.jumlah)
+        }
+      })
+
+      // Jika kasbon, tambah ke catatan hutang
+      if (metode === 'kasbon') {
+        tambahHutang({
+          transaksi,
+          pelanggan: pelanggan || 'Pelanggan',
+          kasir: user?.name ?? 'Kasir',
+        })
+      }
+
       setTransaksiSelesai(transaksi)
       setShowReceipt(true)
-      addToast({ type: 'success', title: 'Transaksi Berhasil', message: `${transaksi.id} tersimpan.` })
+      addToast({
+        type: 'success',
+        title: metode === 'kasbon' ? 'Kasbon Tercatat' : 'Transaksi Berhasil',
+        message: `${transaksi.id} tersimpan.`,
+      })
     } catch (err) {
       addToast({ type: 'error', title: 'Gagal', message: 'Transaksi gagal disimpan.' })
     } finally {
@@ -110,7 +142,6 @@ export default function POSPage() {
       <style>{`
         .pos-page { height: 100%; }
 
-        /* ── Layout ── */
         .pos-layout {
           display: grid;
           grid-template-columns: 1fr 380px;
@@ -119,7 +150,6 @@ export default function POSPage() {
           min-height: 500px;
         }
 
-        /* ── Panel Produk (kiri) ── */
         .pos-product-panel {
           display: flex;
           flex-direction: column;
@@ -132,7 +162,6 @@ export default function POSPage() {
         }
         .pos-search-row { flex-shrink: 0; }
 
-        /* Kategori filter */
         .pos-kategori-filter {
           display: flex;
           gap: var(--space-2);
@@ -163,7 +192,6 @@ export default function POSPage() {
           box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
         }
 
-        /* Product grid */
         .pos-product-grid {
           flex: 1;
           overflow-y: auto;
@@ -203,6 +231,20 @@ export default function POSPage() {
           cursor: not-allowed;
           filter: grayscale(0.5);
         }
+        .pos-product-card.titipan-card {
+          border-color: #d97706;
+          background: #fffbeb;
+        }
+        .pos-product-card.titipan-card:hover:not(:disabled) {
+          border-color: #b45309;
+          background: #fef3c7;
+          box-shadow: var(--shadow-md);
+          transform: translateY(-2px);
+        }
+        .pos-product-card.titipan-card.in-cart {
+          border-color: #b45309;
+          background: #fef3c7;
+        }
         .pos-product-cart-badge {
           position: absolute;
           top: -8px; right: -8px;
@@ -217,10 +259,7 @@ export default function POSPage() {
           justify-content: center;
           box-shadow: 0 2px 6px rgba(22, 163, 74, 0.4);
         }
-        .pos-product-icon {
-          font-size: 2rem;
-          line-height: 1;
-        }
+        .pos-product-icon { font-size: 2rem; line-height: 1; }
         .pos-product-name {
           font-size: var(--font-size-sm);
           font-weight: var(--font-weight-semibold);
@@ -246,7 +285,29 @@ export default function POSPage() {
         }
         .pos-empty span { font-size: 2rem; opacity: 0.4; }
 
-        /* ── Panel Cart (kanan) ── */
+        /* Section pemisah titipan */
+        .pos-section-divider {
+          grid-column: 1/-1;
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          padding: var(--space-2) 0 var(--space-1) 0;
+        }
+        .pos-section-divider-line {
+          flex: 1;
+          border-top: 1px dashed #d97706;
+        }
+        .pos-section-divider-label {
+          font-size: var(--font-size-xs);
+          font-weight: var(--font-weight-bold);
+          color: #d97706;
+          background: #fef3c7;
+          border: 1px solid #d97706;
+          border-radius: var(--radius-full);
+          padding: 2px 10px;
+          white-space: nowrap;
+        }
+
         .pos-cart-panel {
           display: flex;
           flex-direction: column;
@@ -282,7 +343,6 @@ export default function POSPage() {
           text-align: center;
         }
 
-        /* Cart items */
         .pos-cart-items {
           flex: 1;
           overflow-y: auto;
@@ -303,20 +363,15 @@ export default function POSPage() {
           font-size: var(--font-size-sm);
           gap: var(--space-2);
         }
-        .pos-cart-empty-icon {
-          font-size: 3rem;
-          opacity: 0.3;
-          margin-bottom: var(--space-2);
-        }
+        .pos-cart-empty-icon { font-size: 3rem; opacity: 0.3; margin-bottom: var(--space-2); }
         .pos-cart-item {
           display: flex;
           align-items: center;
-          gap: var(--space-3);
+          gap: var(--space-2);
           padding: var(--space-3);
           background: var(--color-bg);
           border: 1px solid var(--color-border);
           border-radius: var(--radius-lg);
-          gap: var(--space-2);
         }
         .pos-cart-item-info { flex: 1; min-width: 0; }
         .pos-cart-item-name {
@@ -327,22 +382,11 @@ export default function POSPage() {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .pos-cart-item-price {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          margin-top: 2px;
-        }
+        .pos-cart-item-price { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
 
-        /* Qty control */
-        .pos-qty-control {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          flex-shrink: 0;
-        }
+        .pos-qty-control { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
         .pos-qty-btn {
-          width: 32px;
-          height: 32px;
+          width: 32px; height: 32px;
           border-radius: var(--radius-md);
           border: 1.5px solid var(--color-border-strong);
           background: var(--color-surface);
@@ -356,11 +400,7 @@ export default function POSPage() {
           transition: all var(--transition-fast);
           line-height: 1;
         }
-        .pos-qty-btn:hover:not(:disabled) {
-          background: var(--color-primary);
-          border-color: var(--color-primary);
-          color: #fff;
-        }
+        .pos-qty-btn:hover:not(:disabled) { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
         .pos-qty-btn:disabled { opacity: 0.35; cursor: not-allowed; }
         .pos-qty-input {
           width: 36px;
@@ -377,8 +417,7 @@ export default function POSPage() {
         .pos-qty-input::-webkit-outer-spin-button,
         .pos-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; }
         .pos-hapus-btn {
-          width: 28px;
-          height: 28px;
+          width: 28px; height: 28px;
           border-radius: var(--radius-sm);
           background: transparent;
           color: var(--color-text-muted);
@@ -390,12 +429,8 @@ export default function POSPage() {
           transition: all var(--transition-fast);
           margin-left: 2px;
         }
-        .pos-hapus-btn:hover {
-          background: var(--color-danger-bg);
-          color: var(--color-danger);
-        }
+        .pos-hapus-btn:hover { background: var(--color-danger-bg); color: var(--color-danger); }
 
-        /* Payment */
         .pos-payment {
           padding: var(--space-4);
           border-top: 1px solid var(--color-border);
@@ -416,11 +451,7 @@ export default function POSPage() {
           color: var(--color-text-primary);
           font-family: 'Plus Jakarta Sans', var(--font-family);
         }
-        .pos-divider {
-          border: none;
-          border-top: 1px solid var(--color-border);
-          margin-bottom: var(--space-3);
-        }
+        .pos-divider { border: none; border-top: 1px solid var(--color-border); margin-bottom: var(--space-3); }
         .pos-metode-label {
           font-size: var(--font-size-xs);
           font-weight: var(--font-weight-semibold);
@@ -457,8 +488,28 @@ export default function POSPage() {
           color: var(--color-primary-active);
           font-weight: var(--font-weight-semibold);
         }
+        .pos-metode-btn.metode-kasbon.active {
+          border-color: #d97706;
+          background: #fef3c7;
+          color: #92400e;
+        }
 
-        /* Uang diterima */
+        .pos-kasbon-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+          margin-bottom: var(--space-2);
+        }
+        .pos-kasbon-info {
+          background: #fef3c7;
+          border: 1px solid #d97706;
+          border-radius: var(--radius-md);
+          padding: var(--space-2) var(--space-3);
+          font-size: var(--font-size-xs);
+          color: #92400e;
+          line-height: 1.4;
+        }
+
         .pos-tunai-section { display: flex; flex-direction: column; gap: var(--space-2); }
         .pos-field-label {
           font-size: var(--font-size-xs);
@@ -504,17 +555,9 @@ export default function POSPage() {
         }
         .pos-uang-input::-webkit-outer-spin-button,
         .pos-uang-input::-webkit-inner-spin-button { -webkit-appearance: none; }
-        .pos-uang-error {
-          font-size: var(--font-size-xs);
-          color: var(--color-danger);
-        }
+        .pos-uang-error { font-size: var(--font-size-xs); color: var(--color-danger); }
 
-        /* Nominal cepat */
-        .pos-nominal-cepat {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--space-1);
-        }
+        .pos-nominal-cepat { display: flex; flex-wrap: wrap; gap: var(--space-1); }
         .pos-nominal-btn {
           padding: var(--space-1) var(--space-2);
           border-radius: var(--radius-md);
@@ -531,13 +574,8 @@ export default function POSPage() {
           background: var(--color-primary-light);
           color: var(--color-primary);
         }
-        .pos-nominal-pas {
-          background: var(--color-primary-light);
-          border-color: var(--color-primary);
-          color: var(--color-primary);
-        }
+        .pos-nominal-pas { background: var(--color-primary-light); border-color: var(--color-primary); color: var(--color-primary); }
 
-        /* Kembalian */
         .pos-kembalian {
           display: flex;
           justify-content: space-between;
@@ -549,35 +587,17 @@ export default function POSPage() {
           font-size: var(--font-size-sm);
           color: var(--color-text-muted);
         }
-        .pos-kembalian-kurang {
-          background: var(--color-danger-bg);
-          border-color: var(--color-danger);
-        }
-        .pos-kembalian-value {
-          font-size: var(--font-size-base);
-          font-weight: var(--font-weight-extrabold);
-          color: var(--color-success);
-        }
+        .pos-kembalian-kurang { background: var(--color-danger-bg); border-color: var(--color-danger); }
+        .pos-kembalian-value { font-size: var(--font-size-base); font-weight: var(--font-weight-extrabold); color: var(--color-success); }
         .pos-kembalian-kurang .pos-kembalian-value { color: var(--color-danger); }
 
-        /* ── Responsive ── */
         @media (max-width: 900px) {
-          .pos-layout {
-            grid-template-columns: 1fr;
-            grid-template-rows: 1fr auto;
-            height: auto;
-          }
-          .pos-product-grid {
-            max-height: 50vh;
-          }
-          .pos-cart-panel {
-            max-height: 60vh;
-          }
+          .pos-layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; height: auto; }
+          .pos-product-grid { max-height: 50vh; }
+          .pos-cart-panel { max-height: 60vh; }
         }
         @media (max-width: 600px) {
-          .pos-product-grid {
-            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-          }
+          .pos-product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
         }
       `}</style>
     </div>

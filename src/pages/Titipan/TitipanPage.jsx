@@ -1,91 +1,24 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
-import { Input, Select, Textarea } from '../../components/ui/Input'
+import { Input } from '../../components/ui/Input'
 import { EmptyState } from '../../components/shared/EmptyState'
-import { formatRupiah, formatNumber } from '../../utils/currency'
-import { formatTanggalPanjang, formatTanggalPendek, formatTanggalWaktu, formatWaktu } from '../../utils/date'
+import { formatRupiah } from '../../utils/currency'
+import { formatTanggalPendek, formatTanggalWaktu } from '../../utils/date'
 import { useToast } from '../../context/ToastContext'
-
-const TITIPAN_STORAGE_KEY = 'kantinku_titipan'
-
-const INITIAL_TITIPAN = [
-  {
-    id: 1,
-    namaProduk: 'Risoles Mayo Daging',
-    penitip: 'Bu Sri Rahayu',
-    kontak: '0813-8899-7711',
-    hargaJual: 4000,
-    hargaSetor: 3000,
-    jumlahTitip: 30,
-    terjual: 26,
-    retur: 4,
-    statusBayar: 'belum', // 'belum' | 'lunas'
-    tanggal: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    namaProduk: 'Pastel Ayam Telur',
-    penitip: 'Dapur Bu Dewi',
-    kontak: '0812-7766-5544',
-    hargaJual: 3500,
-    hargaSetor: 2700,
-    jumlahTitip: 25,
-    terjual: 25,
-    retur: 0,
-    statusBayar: 'lunas',
-    tanggal: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    namaProduk: 'Lemper Ayam Bakar',
-    penitip: 'Bu Sri Rahayu',
-    kontak: '0813-8899-7711',
-    hargaJual: 3500,
-    hargaSetor: 2800,
-    jumlahTitip: 20,
-    terjual: 18,
-    retur: 2,
-    statusBayar: 'belum',
-    tanggal: new Date().toISOString(),
-  },
-  {
-    id: 4,
-    namaProduk: 'Puding Coklat Vla',
-    penitip: 'Mama Kiki (UMKM)',
-    kontak: '0857-1122-3344',
-    hargaJual: 5000,
-    hargaSetor: 3800,
-    jumlahTitip: 15,
-    terjual: 12,
-    retur: 3,
-    statusBayar: 'belum',
-    tanggal: new Date().toISOString(),
-  },
-]
+import { useTitipan } from '../../context/TitipanContext'
 
 export default function TitipanPage() {
   const { addToast } = useToast()
-
-  // State List Titipan
-  const [titipanList, setTitipanList] = useState(() => {
-    try {
-      const saved = localStorage.getItem(TITIPAN_STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
-    } catch (e) {
-      console.error('Error loading titipan:', e)
-    }
-    return INITIAL_TITIPAN
-  })
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(TITIPAN_STORAGE_KEY, JSON.stringify(titipanList))
-    } catch (e) {
-      console.error('Error saving titipan:', e)
-    }
-  }, [titipanList])
+  const {
+    titipanList,
+    tambahTitipan,
+    updateRekap,
+    toggleStatusBayar,
+    hapusTitipan,
+    metrics,
+  } = useTitipan()
 
   // Filters
   const [search, setSearch] = useState('')
@@ -111,29 +44,6 @@ export default function TitipanPage() {
   // Print ref
   const printSlipRef = useRef(null)
   const [itemToPrint, setItemToPrint] = useState(null)
-
-  // Metrics KPI
-  const metrics = useMemo(() => {
-    let totalUnitTitip = 0
-    let totalUnitTerjual = 0
-    let totalUangSetoran = 0
-    let totalKomisiKantin = 0
-
-    titipanList.forEach(item => {
-      totalUnitTitip += item.jumlahTitip
-      totalUnitTerjual += item.terjual
-      totalUangSetoran += item.terjual * item.hargaSetor
-      totalKomisiKantin += item.terjual * (item.hargaJual - item.hargaSetor)
-    })
-
-    return {
-      totalMacam: titipanList.length,
-      totalUnitTitip,
-      totalUnitTerjual,
-      totalUangSetoran,
-      totalKomisiKantin,
-    }
-  }, [titipanList])
 
   // Filtered List
   const filteredList = useMemo(() => {
@@ -163,7 +73,7 @@ export default function TitipanPage() {
 
     if (hargaJual <= 0) errs.hargaJual = 'Harga jual harus lebih dari 0'
     if (hargaSetor <= 0) errs.hargaSetor = 'Harga setor harus lebih dari 0'
-    if (hargaSetor >= hargaJual) errs.hargaSetor = 'Harga setor harus lebih kecil dari harga jual agar kantin mendapat komisi'
+    if (hargaSetor >= hargaJual) errs.hargaSetor = 'Harga setor harus lebih kecil dari harga jual'
     if (jumlahTitip <= 0) errs.jumlahTitip = 'Jumlah titip minimal 1 unit'
 
     if (Object.keys(errs).length > 0) {
@@ -173,23 +83,8 @@ export default function TitipanPage() {
 
     setSavingTambah(true)
     try {
-      await new Promise(r => setTimeout(r, 400))
-      const maxId = titipanList.reduce((m, t) => Math.max(m, t.id), 0)
-      const newItem = {
-        id: maxId + 1,
-        namaProduk: formTambah.namaProduk.trim(),
-        penitip: formTambah.penitip.trim(),
-        kontak: formTambah.kontak.trim(),
-        hargaJual,
-        hargaSetor,
-        jumlahTitip,
-        terjual: 0,
-        retur: 0,
-        statusBayar: 'belum',
-        tanggal: new Date().toISOString(),
-      }
-
-      setTitipanList(prev => [newItem, ...prev])
+      await new Promise(r => setTimeout(r, 300))
+      const newItem = tambahTitipan(formTambah)
       setIsTambahOpen(false)
       addToast({
         type: 'success',
@@ -205,46 +100,24 @@ export default function TitipanPage() {
   const handleSimpanRekap = () => {
     if (!selectedRekap) return
     const returNum = Math.max(0, parseInt(returInput, 10) || 0)
-    const terjualNum = Math.max(0, selectedRekap.jumlahTitip - returNum)
-
-    setTitipanList(prev =>
-      prev.map(item =>
-        item.id === selectedRekap.id
-          ? {
-              ...item,
-              retur: returNum,
-              terjual: terjualNum,
-            }
-          : item
-      )
-    )
-
+    updateRekap(selectedRekap.id, returNum)
     addToast({
       type: 'info',
       title: 'Rekap Diperbarui',
-      message: `${selectedRekap.namaProduk}: ${terjualNum} terjual, ${returNum} retur.`,
+      message: `${selectedRekap.namaProduk}: sisa retur ${returNum} unit.`,
     })
     setSelectedRekap(null)
   }
 
   // Toggle Status Bayar
   const handleToggleBayar = (id) => {
-    setTitipanList(prev =>
-      prev.map(item =>
-        item.id === id
-          ? {
-              ...item,
-              statusBayar: item.statusBayar === 'lunas' ? 'belum' : 'lunas',
-            }
-          : item
-      )
-    )
+    toggleStatusBayar(id)
     addToast({ type: 'success', title: 'Status Setoran Diubah' })
   }
 
   // Hapus Titipan
   const handleHapusTitipan = (id) => {
-    setTitipanList(prev => prev.filter(item => item.id !== id))
+    hapusTitipan(id)
     addToast({ type: 'info', title: 'Barang titipan dihapus' })
   }
 
@@ -284,9 +157,8 @@ export default function TitipanPage() {
   // Ekspor CSV
   const handleExportCSV = () => {
     if (titipanList.length === 0) return
-    const headers = ['Produk', 'Penitip', 'Kontak', 'Harga Jual', 'Harga Setor', 'Komisi Kantin', 'Titip Awal', 'Terjual', 'Retur Sisa', 'Total Setoran', 'Status Bayar']
+    const headers = ['Produk', 'Penitip', 'Kontak', 'Harga Jual', 'Harga Setor', 'Titip Awal', 'Terjual', 'Retur Sisa', 'Total Setoran', 'Status Bayar']
     const rows = titipanList.map(t => {
-      const komisi = t.hargaJual - t.hargaSetor
       const totalSetor = t.terjual * t.hargaSetor
       return [
         `"${t.namaProduk}"`,
@@ -294,7 +166,6 @@ export default function TitipanPage() {
         `"${t.kontak || ''}"`,
         t.hargaJual,
         t.hargaSetor,
-        komisi,
         t.jumlahTitip,
         t.terjual,
         t.retur,
@@ -324,7 +195,7 @@ export default function TitipanPage() {
             <Badge variant="primary" dot>Fitur Opsional Aktif</Badge>
           </div>
           <p className="page-subtitle">
-            Manajemen makanan titipan dari vendor luar/ibu kantin, hitung bagi hasil komisi kantin, sisa retur, dan uang setoran.
+            Pencatatan makanan/minuman titipan mitra kantin. Produk otomatis tampil di Kasir jika fitur Titipan aktif.
           </p>
         </div>
 
@@ -385,17 +256,6 @@ export default function TitipanPage() {
             <div className="titipan-stat-sub">Hak uang milik vendor/penitip</div>
           </div>
         </div>
-
-        <div className="titipan-stat-card">
-          <div className="titipan-stat-icon stat-icon--success" aria-hidden="true">💰</div>
-          <div className="titipan-stat-content">
-            <div className="titipan-stat-label">Laba Komisi Kantin</div>
-            <div className="titipan-stat-value" style={{ color: 'var(--color-success)' }}>
-              {formatRupiah(metrics.totalKomisiKantin)}
-            </div>
-            <div className="titipan-stat-sub">Keuntungan bersih kantin</div>
-          </div>
-        </div>
       </div>
 
       {/* ── Table Card ── */}
@@ -445,9 +305,9 @@ export default function TitipanPage() {
                   <th>Penitip / Mitra</th>
                   <th style={{ textAlign: 'right' }}>Harga Jual</th>
                   <th style={{ textAlign: 'right' }}>Harga Setor</th>
-                  <th style={{ textAlign: 'right' }}>Komisi Kantin</th>
                   <th style={{ textAlign: 'center' }}>Titip Awal</th>
                   <th style={{ textAlign: 'center' }}>Terjual</th>
+                  <th style={{ textAlign: 'center' }}>Sisa Stok</th>
                   <th style={{ textAlign: 'center' }}>Retur</th>
                   <th style={{ textAlign: 'right' }}>Total Setoran</th>
                   <th style={{ textAlign: 'center' }}>Status</th>
@@ -456,7 +316,7 @@ export default function TitipanPage() {
               </thead>
               <tbody>
                 {filteredList.map((item, idx) => {
-                  const komisiUnit = item.hargaJual - item.hargaSetor
+                  const sisaStok = Math.max(0, item.jumlahTitip - item.terjual - item.retur)
                   const totalSetoran = item.terjual * item.hargaSetor
                   const isLunas = item.statusBayar === 'lunas'
 
@@ -480,11 +340,11 @@ export default function TitipanPage() {
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatRupiah(item.hargaJual)}</td>
                       <td style={{ textAlign: 'right', color: 'var(--color-text-muted)' }}>{formatRupiah(item.hargaSetor)}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--color-success)', fontWeight: 'bold' }}>
-                        +{formatRupiah(komisiUnit)}
-                      </td>
                       <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{item.jumlahTitip}</td>
                       <td style={{ textAlign: 'center', color: 'var(--color-primary)', fontWeight: 'bold' }}>{item.terjual}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 'bold', color: sisaStok === 0 ? 'var(--color-danger)' : 'var(--color-text-primary)' }}>
+                        {sisaStok}
+                      </td>
                       <td style={{ textAlign: 'center' }}>
                         {item.retur > 0 ? (
                           <Badge variant="warning">{item.retur}</Badge>
@@ -637,29 +497,6 @@ export default function TitipanPage() {
               id="input-titipan-setor"
             />
           </div>
-
-          {/* Live Calculation Preview */}
-          {formTambah.hargaJual && formTambah.hargaSetor && (
-            <div className="titipan-preview-card">
-              <div className="preview-line">
-                <span>Komisi Kantin per Bungkus:</span>
-                <strong style={{ color: 'var(--color-success)' }}>
-                  +{formatRupiah((parseInt(formTambah.hargaJual, 10) || 0) - (parseInt(formTambah.hargaSetor, 10) || 0))}
-                </strong>
-              </div>
-              {formTambah.jumlahTitip && (
-                <div className="preview-line">
-                  <span>Potensi Laba Maksimal Kantin:</span>
-                  <strong>
-                    {formatRupiah(
-                      ((parseInt(formTambah.hargaJual, 10) || 0) - (parseInt(formTambah.hargaSetor, 10) || 0)) *
-                      (parseInt(formTambah.jumlahTitip, 10) || 0)
-                    )}
-                  </strong>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </Modal>
 
@@ -713,12 +550,6 @@ export default function TitipanPage() {
                   {formatRupiah(Math.max(0, selectedRekap.jumlahTitip - (parseInt(returInput, 10) || 0)) * selectedRekap.hargaSetor)}
                 </strong>
               </div>
-              <div className="calc-row">
-                <span>Laba Komisi Kantin:</span>
-                <strong style={{ color: 'var(--color-success)' }}>
-                  +{formatRupiah(Math.max(0, selectedRekap.jumlahTitip - (parseInt(returInput, 10) || 0)) * (selectedRekap.hargaJual - selectedRekap.hargaSetor))}
-                </strong>
-              </div>
             </div>
           </div>
         </Modal>
@@ -730,7 +561,7 @@ export default function TitipanPage() {
           {itemToPrint && (
             <div>
               <div className="slip-center">
-                <div className="slip-brand">KANTINKU SMAN 8</div>
+                <div className="slip-brand">KANTINKU</div>
                 <div>Bukti Setoran Barang Titipan</div>
                 <div>Tanggal: {formatTanggalWaktu(new Date())}</div>
               </div>
@@ -776,273 +607,89 @@ export default function TitipanPage() {
         </div>
       </div>
 
-      {/* ── Scoped Styling ── */}
       <style>{`
-        .titipan-page {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-6);
-        }
+        .titipan-page { display: flex; flex-direction: column; gap: var(--space-6); }
+        .titipan-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); }
+        .titipan-header-title-row { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-1); }
+        .titipan-header-actions { display: flex; align-items: center; gap: var(--space-3); }
 
-        /* Header */
-        .titipan-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: var(--space-4);
-        }
-        .titipan-header-title-row {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-          margin-bottom: var(--space-1);
-        }
-        .titipan-header-actions {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-        }
-
-        /* KPI Cards */
-        .titipan-stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: var(--space-4);
-        }
+        .titipan-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
         .titipan-stat-card {
           background: var(--color-surface);
           border: 1px solid var(--color-border);
           border-radius: var(--radius-xl);
-          padding: var(--space-5);
-          display: flex;
-          align-items: center;
-          gap: var(--space-4);
+          padding: var(--space-4);
+          display: flex; align-items: center; gap: var(--space-4);
           box-shadow: var(--shadow-sm);
-          transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-        }
-        .titipan-stat-card:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-md);
         }
         .titipan-stat-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: var(--radius-lg);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.4rem;
-          flex-shrink: 0;
+          width: 48px; height: 48px; border-radius: var(--radius-lg);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.4rem; flex-shrink: 0;
         }
         .stat-icon--primary { background: var(--color-primary-subtle); color: var(--color-primary); }
         .stat-icon--info { background: #eff6ff; color: #2563eb; }
-        .stat-icon--warning { background: #fffbeb; color: #d97706; }
-        .stat-icon--success { background: #ecfdf5; color: #059669; }
+        .stat-icon--warning { background: #fef3c7; color: #d97706; }
         .titipan-stat-content { flex: 1; min-width: 0; }
-        .titipan-stat-label {
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-bottom: 2px;
-        }
-        .titipan-stat-value {
-          font-size: var(--font-size-2xl);
-          font-weight: var(--font-weight-extrabold);
-          color: var(--color-text-primary);
-          line-height: var(--line-height-tight);
-        }
-        .titipan-stat-sub {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          margin-top: 2px;
-        }
+        .titipan-stat-label { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-medium); }
+        .titipan-stat-value { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); color: var(--color-text-primary); }
+        .titipan-stat-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
-        /* Table Card */
-        .table-card { padding: 0; overflow: hidden; }
         .table-top-bar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: var(--space-4) var(--space-5);
-          border-bottom: 1px solid var(--color-border);
-          gap: var(--space-4);
-          flex-wrap: wrap;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: var(--space-4); border-bottom: 1px solid var(--color-border);
+          flex-wrap: wrap; gap: var(--space-3);
         }
-        .status-tabs-row {
-          display: flex;
-          background: var(--color-surface-sunken);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-lg);
-          padding: 2px;
-        }
+        .status-tabs-row { display: flex; gap: 4px; background: var(--color-surface-sunken); padding: 3px; border-radius: var(--radius-md); }
         .tab-btn-mini {
-          border: none;
-          background: transparent;
-          padding: 4px 12px;
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          border-radius: var(--radius-md);
-          cursor: pointer;
-          font-weight: var(--font-weight-medium);
-          transition: all var(--transition-fast);
+          border: none; background: transparent; padding: var(--space-1) var(--space-3);
+          font-size: var(--font-size-xs); font-weight: var(--font-weight-medium);
+          color: var(--color-text-muted); border-radius: var(--radius-sm); cursor: pointer;
         }
-        .tab-btn-mini.active {
-          background: var(--color-surface);
-          color: var(--color-primary);
-          font-weight: bold;
-          box-shadow: var(--shadow-sm);
-        }
+        .tab-btn-mini.active { background: var(--color-surface); color: var(--color-primary); font-weight: bold; box-shadow: var(--shadow-sm); }
 
-        .table-responsive { overflow-x: auto; }
-        .titipan-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: var(--font-size-sm);
-        }
+        .titipan-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
         .titipan-table th {
-          background: var(--color-surface-sunken);
-          color: var(--color-text-muted);
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-bold);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: var(--space-3) var(--space-4);
-          border-bottom: 1px solid var(--color-border);
-          white-space: nowrap;
+          background: var(--color-surface-sunken); color: var(--color-text-muted);
+          font-size: var(--font-size-xs); font-weight: var(--font-weight-bold);
+          text-transform: uppercase; letter-spacing: 0.05em;
+          padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border);
+          text-align: left;
         }
-        .titipan-table td {
-          padding: var(--space-4);
-          border-bottom: 1px solid var(--color-border);
-          vertical-align: middle;
-        }
-        .titipan-table tr:last-child td { border-bottom: none; }
+        .titipan-table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
         .titipan-table tr:hover td { background: var(--color-surface-hover); }
+
         .col-muted { color: var(--color-text-muted); font-size: var(--font-size-xs); }
-
-        .product-title-row {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-        }
-        .food-icon {
-          font-size: 1.4rem;
-          background: var(--color-surface-sunken);
-          padding: 6px;
-          border-radius: var(--radius-md);
-        }
-        .item-date-sub {
-          font-size: 11px;
-          color: var(--color-text-muted);
-        }
-
-        .penitip-cell {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .penitip-name { font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
-        .penitip-kontak { font-size: 11px; color: var(--color-text-muted); }
+        .product-title-row { display: flex; align-items: center; gap: var(--space-2); }
+        .food-icon { font-size: 1.3rem; }
+        .item-date-sub { font-size: 10px; color: var(--color-text-muted); }
+        .penitip-cell { display: flex; flex-direction: column; }
+        .penitip-name { font-weight: var(--font-weight-medium); }
+        .penitip-kontak { font-size: 10px; color: var(--color-text-muted); }
 
         .bayar-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 3px 10px;
-          border-radius: var(--radius-full);
-          font-size: 11px;
-          font-weight: bold;
-          border: 1px solid transparent;
-          cursor: pointer;
+          display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
+          border-radius: var(--radius-full); font-size: 11px; font-weight: bold;
+          border: 1px solid transparent; cursor: pointer;
         }
         .bayar-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
         .bayar-lunas { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
         .bayar-lunas .dot { background: #10b981; }
-        .bayar-belum { background: #fffbeb; color: #b45309; border-color: #fde68a; }
-        .bayar-belum .dot { background: #f59e0b; }
+        .bayar-belum { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+        .bayar-belum .dot { background: #ef4444; }
 
-        .table-action-btns {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: var(--space-2);
-        }
-        .btn-danger-ghost:hover {
-          color: var(--color-danger) !important;
-          background: #fef2f2 !important;
-        }
+        .table-action-btns { display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .btn-danger-ghost:hover { color: var(--color-danger) !important; background: #fef2f2 !important; }
 
-        /* Form Modal */
-        .titipan-modal-form {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-4);
-        }
-        .form-row-2 {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--space-3);
-        }
-        .form-row-3 {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: var(--space-3);
-        }
-        .titipan-preview-card {
-          background: var(--color-surface-sunken);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-lg);
-          padding: var(--space-3) var(--space-4);
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          font-size: var(--font-size-sm);
-        }
-        .preview-line {
-          display: flex;
-          justify-content: space-between;
-        }
+        .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
 
-        /* Rekap Modal */
-        .rekap-modal-body {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-3);
-        }
-        .rekap-info-box {
-          background: var(--color-surface-sunken);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          padding: var(--space-3) var(--space-4);
-          font-size: var(--font-size-sm);
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
+        .rekap-info-box { background: var(--color-surface-sunken); padding: var(--space-3); border-radius: var(--radius-md); font-size: var(--font-size-sm); }
         .rekap-calculation-box {
-          background: #fffbeb;
-          border: 1px solid #fde68a;
-          border-radius: var(--radius-md);
-          padding: var(--space-3) var(--space-4);
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-2);
-          font-size: var(--font-size-sm);
+          margin-top: var(--space-4); padding: var(--space-3); border: 1px dashed var(--color-border);
+          border-radius: var(--radius-md); display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--font-size-sm);
         }
-        .calc-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        @media (max-width: 768px) {
-          .titipan-header { flex-direction: column; align-items: stretch; }
-          .titipan-header-actions { width: 100%; }
-          .titipan-header-actions button { flex: 1; }
-          .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
-        }
+        .calc-row { display: flex; justify-content: space-between; }
       `}</style>
     </div>
   )

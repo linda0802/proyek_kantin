@@ -1,17 +1,13 @@
+import { useMemo } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
+import { useTransaksiContext } from '../../context/TransaksiContext'
+import { useProduk } from '../../context/ProdukContext'
+import { useHutang } from '../../context/HutangContext'
 import { StatCard } from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import { formatRupiah } from '../../utils/currency'
 import { formatTanggalPanjang, formatWaktu } from '../../utils/date'
-import {
-  SUMMARY_HARI_INI,
-  PRODUK_TERLARIS,
-  STOK_MENIPIS,
-  STOK_HABIS,
-  TRANSAKSI_HARI_INI,
-  GRAFIK_PER_JAM,
-} from '../../data/mockData'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -21,26 +17,107 @@ function getGreeting() {
   return 'Selamat malam'
 }
 
-// Hitung lebar bar berdasarkan nilai max
+// Hitung lebar bar grafik
 function getBarWidth(value, maxValue) {
   if (!maxValue) return 0
   return Math.round((value / maxValue) * 100)
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const { settings } = useSettings()
+  const { transaksiList } = useTransaksiContext()
+  const { produkList, kategoriList } = useProduk()
+  const { hutangList, metrics: hutangMetrics } = useHutang()
+
   const now = new Date()
   const tanggal = formatTanggalPanjang(now)
   const firstName = user?.name?.split(' ')[0] ?? 'Pengguna'
 
-  const maxPenjualan = Math.max(...GRAFIK_PER_JAM.map(g => g.penjualan), 1)
+  const bolehHutang = hasPermission('hutang')
 
-  // Transaksi terakhir (5 paling baru, sudah selesai)
-  const transaksiTerbaru = [...TRANSAKSI_HARI_INI]
-    .filter(t => t.status === 'selesai')
-    .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal))
-    .slice(0, 5)
+  // Transaksi hari ini yang selesai
+  const transaksiHariIni = useMemo(() => {
+    const todayStr = new Date().toDateString()
+    return transaksiList.filter(
+      t => t.status === 'selesai' && new Date(t.tanggal).toDateString() === todayStr
+    )
+  }, [transaksiList])
+
+  // Summary hari ini
+  const summaryHariIni = useMemo(() => {
+    const totalPenjualan = transaksiHariIni.reduce((sum, t) => sum + (t.total || 0), 0)
+    const jumlahTransaksi = transaksiHariIni.length
+    return {
+      totalPenjualan,
+      jumlahTransaksi,
+    }
+  }, [transaksiHariIni])
+
+  // Stok perlu perhatian (dari data produk real)
+  const stokHabis = useMemo(() => {
+    return produkList.filter(p => p.status === 'habis' || p.stok === 0)
+  }, [produkList])
+
+  const stokMenipis = useMemo(() => {
+    return produkList.filter(p => p.stok > 0 && p.stok <= 5)
+  }, [produkList])
+
+  // Grafik penjualan per jam (dari data transaksi real hari ini)
+  const grafikPerJam = useMemo(() => {
+    const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00']
+    const dataMap = {}
+    hours.forEach(h => { dataMap[h] = { penjualan: 0, transaksi: 0 } })
+
+    transaksiHariIni.forEach(t => {
+      const h = new Date(t.tanggal).getHours()
+      const key = `${String(h).padStart(2, '0')}:00`
+      if (dataMap[key]) {
+        dataMap[key].penjualan += t.total || 0
+        dataMap[key].transaksi += 1
+      }
+    })
+
+    return hours.map(jam => ({
+      jam,
+      penjualan: dataMap[jam].penjualan,
+      transaksi: dataMap[jam].transaksi,
+    }))
+  }, [transaksiHariIni])
+
+  const maxPenjualan = Math.max(...grafikPerJam.map(g => g.penjualan), 1)
+
+  // Produk Terlaris hari ini (dari items transaksi real hari ini)
+  const produkTerlaris = useMemo(() => {
+    const map = {}
+    transaksiHariIni.forEach(t => {
+      t.items?.forEach(i => {
+        const key = i.nama
+        if (!map[key]) {
+          map[key] = {
+            produkId: i.produkId,
+            nama: i.nama,
+            terjual: 0,
+            omzet: 0,
+          }
+        }
+        map[key].terjual += i.jumlah || 0
+        map[key].omzet += (i.hargaJual || 0) * (i.jumlah || 0)
+      })
+    })
+
+    return Object.values(map)
+      .sort((a, b) => b.terjual - a.terjual)
+      .slice(0, 5)
+  }, [transaksiHariIni])
+
+  // 5 Transaksi terbaru
+  const transaksiTerbaru = useMemo(() => {
+    return [...transaksiList]
+      .filter(t => t.status === 'selesai')
+      .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal))
+      .slice(0, 5)
+  }, [transaksiList])
 
   return (
     <div id="dashboard-page">
@@ -63,33 +140,46 @@ export default function DashboardPage() {
         <StatCard
           icon="💰"
           label="Total Penjualan Hari Ini"
-          value={formatRupiah(SUMMARY_HARI_INI.totalPenjualan)}
-          sub={`${SUMMARY_HARI_INI.jumlahTransaksi} transaksi selesai`}
+          value={formatRupiah(summaryHariIni.totalPenjualan)}
+          sub={`${summaryHariIni.jumlahTransaksi} transaksi selesai`}
           id="stat-card-penjualan"
         />
         <StatCard
           icon="🛒"
           label="Jumlah Transaksi"
-          value={String(SUMMARY_HARI_INI.jumlahTransaksi)}
+          value={String(summaryHariIni.jumlahTransaksi)}
           sub="Hari ini"
           accentColor="var(--color-info)"
           iconBg="var(--color-info-bg)"
           id="stat-card-transaksi"
         />
-        <StatCard
-          icon="📈"
-          label="Estimasi Laba Kotor"
-          value={formatRupiah(SUMMARY_HARI_INI.estimasiLaba)}
-          sub="Dari transaksi selesai"
-          accentColor="var(--color-warning)"
-          iconBg="var(--color-warning-bg)"
-          id="stat-card-laba"
-        />
+        {/* Fitur Kasbon di Dashboard (menggantikan estimasi laba kotor) */}
+        {bolehHutang ? (
+          <StatCard
+            icon="📝"
+            label="Kasbon Belum Lunas"
+            value={formatRupiah(hutangMetrics.totalHutangBelumLunas)}
+            sub={`${hutangMetrics.jumlahBelumLunas} catatan aktif`}
+            accentColor="var(--color-warning)"
+            iconBg="var(--color-warning-bg)"
+            id="stat-card-kasbon"
+          />
+        ) : (
+          <StatCard
+            icon="📦"
+            label="Total Menu Produk"
+            value={`${produkList.length} item`}
+            sub="Terdaftar di kantin"
+            accentColor="var(--color-warning)"
+            iconBg="var(--color-warning-bg)"
+            id="stat-card-total-produk"
+          />
+        )}
         <StatCard
           icon="⚠️"
-          label="Stok Hampir Habis"
-          value={`${SUMMARY_HARI_INI.stokMenipis} produk`}
-          sub={`${SUMMARY_HARI_INI.stokHabis} produk habis`}
+          label="Stok Perlu Perhatian"
+          value={`${stokMenipis.length} menipis`}
+          sub={`${stokHabis.length} produk habis`}
           accentColor="var(--color-danger)"
           iconBg="var(--color-danger-bg)"
           id="stat-card-stok"
@@ -106,7 +196,7 @@ export default function DashboardPage() {
             <Badge variant="primary">Hari ini</Badge>
           </div>
           <div className="grafik-container" id="dashboard-grafik-perjam" role="img" aria-label="Grafik penjualan per jam">
-            {GRAFIK_PER_JAM.map((item) => (
+            {grafikPerJam.map((item) => (
               <div key={item.jam} className="grafik-bar-group">
                 <div className="grafik-bar-label-top">
                   {item.penjualan > 0 && (
@@ -129,24 +219,23 @@ export default function DashboardPage() {
             ))}
           </div>
           <div className="grafik-summary">
-            <span>Total: <strong>{formatRupiah(SUMMARY_HARI_INI.totalPenjualan)}</strong></span>
-            <span>Transaksi: <strong>{SUMMARY_HARI_INI.jumlahTransaksi}</strong></span>
+            <span>Total: <strong>{formatRupiah(summaryHariIni.totalPenjualan)}</strong></span>
+            <span>Transaksi: <strong>{summaryHariIni.jumlahTransaksi}</strong></span>
           </div>
         </div>
 
         {/* Produk Terlaris */}
         <div className="card" id="dashboard-terlaris-card">
           <div className="dashboard-card-header">
-            <h3 className="dashboard-card-title">🏆 Produk Terlaris</h3>
-            <Badge variant="success">Hari ini</Badge>
+            <h3 className="dashboard-card-title">🏆 Produk Terlaris Hari Ini</h3>
+            <Badge variant="success">Real-time</Badge>
           </div>
           <div className="terlaris-list" id="dashboard-terlaris-list">
-            {PRODUK_TERLARIS.map((item, index) => (
-              <div key={item.produkId} className="terlaris-item" id={`terlaris-item-${item.produkId}`}>
+            {produkTerlaris.map((item, index) => (
+              <div key={item.nama} className="terlaris-item">
                 <div className="terlaris-rank">{index + 1}</div>
                 <div className="terlaris-info">
                   <div className="terlaris-nama">{item.nama}</div>
-                  <div className="terlaris-kategori">{item.kategori}</div>
                 </div>
                 <div className="terlaris-stats">
                   <div className="terlaris-terjual">{item.terjual} terjual</div>
@@ -154,7 +243,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
-            {PRODUK_TERLARIS.length === 0 && (
+            {produkTerlaris.length === 0 && (
               <p className="dashboard-empty">Belum ada penjualan hari ini.</p>
             )}
           </div>
@@ -168,23 +257,23 @@ export default function DashboardPage() {
         <div className="card" id="dashboard-stok-card">
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">⚠️ Stok Perlu Perhatian</h3>
-            <Badge variant="warning">{STOK_MENIPIS.length + STOK_HABIS.length} produk</Badge>
+            <Badge variant="warning">{stokMenipis.length + stokHabis.length} produk</Badge>
           </div>
           <div className="stok-list" id="dashboard-stok-list">
-            {STOK_HABIS.map(p => (
+            {stokHabis.map(p => (
               <div key={p.id} className="stok-item" id={`stok-item-habis-${p.id}`}>
                 <span className="stok-nama">{p.nama}</span>
                 <Badge variant="danger" dot>Habis</Badge>
               </div>
             ))}
-            {STOK_MENIPIS.map(p => (
+            {stokMenipis.map(p => (
               <div key={p.id} className="stok-item" id={`stok-item-menipis-${p.id}`}>
                 <span className="stok-nama">{p.nama}</span>
                 <Badge variant="warning" dot>{p.stok} tersisa</Badge>
               </div>
             ))}
-            {STOK_MENIPIS.length === 0 && STOK_HABIS.length === 0 && (
-              <p className="dashboard-empty">Semua stok aman. ✅</p>
+            {stokMenipis.length === 0 && stokHabis.length === 0 && (
+              <p className="dashboard-empty">Semua stok aman atau belum ada produk.</p>
             )}
           </div>
         </div>
@@ -193,7 +282,7 @@ export default function DashboardPage() {
         <div className="card" id="dashboard-transaksi-card">
           <div className="dashboard-card-header">
             <h3 className="dashboard-card-title">🕐 Transaksi Terbaru</h3>
-            <Badge variant="neutral">{TRANSAKSI_HARI_INI.filter(t => t.status === 'selesai').length} selesai</Badge>
+            <Badge variant="neutral">{transaksiList.filter(t => t.status === 'selesai').length} selesai</Badge>
           </div>
           <div className="transaksi-list" id="dashboard-transaksi-list">
             {transaksiTerbaru.map(t => (
@@ -203,41 +292,23 @@ export default function DashboardPage() {
                   <span className="transaksi-kasir">{t.kasir}</span>
                   <span className="transaksi-waktu">{formatWaktu(t.tanggal)}</span>
                 </div>
-                <div className="transaksi-total">{formatRupiah(t.total)}</div>
+                <div className="transaksi-total">
+                  {formatRupiah(t.total)}
+                  {t.metodePembayaran === 'kasbon' && (
+                    <Badge variant="warning" style={{ marginLeft: '4px', fontSize: '9px' }}>Kasbon</Badge>
+                  )}
+                </div>
               </div>
             ))}
             {transaksiTerbaru.length === 0 && (
-              <p className="dashboard-empty">Belum ada transaksi hari ini.</p>
+              <p className="dashboard-empty">Belum ada transaksi.</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Widget Opsional: Rekap Jam Istirahat ── */}
-      {settings?.optionalFeatures?.rekapIstirahat && (
-        <div className="card" id="dashboard-istirahat-card" style={{ marginTop: 'var(--space-4)' }}>
-          <div className="dashboard-card-header">
-            <h3 className="dashboard-card-title">⏰ Rekap Jam Istirahat</h3>
-            <Badge variant="info">Fitur Opsional</Badge>
-          </div>
-          <div className="istirahat-grid" id="dashboard-istirahat-grid">
-            {[
-              { label: 'Istirahat 1 (09:30–10:00)', penjualan: 25000, transaksi: 1 },
-              { label: 'Istirahat 2 (12:00–12:30)', penjualan: 0, transaksi: 0 },
-            ].map(item => (
-              <div key={item.label} className="istirahat-item">
-                <div className="istirahat-label">{item.label}</div>
-                <div className="istirahat-nilai">{formatRupiah(item.penjualan)}</div>
-                <div className="istirahat-trans">{item.transaksi} transaksi</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* CSS lokal Dashboard */}
       <style>{`
-        /* Greeting */
         .dashboard-greeting {
           display: flex;
           align-items: center;
@@ -259,7 +330,6 @@ export default function DashboardPage() {
           color: var(--color-success);
         }
 
-        /* Card header */
         .dashboard-card-header {
           display: flex;
           align-items: center;
@@ -274,7 +344,6 @@ export default function DashboardPage() {
           color: var(--color-text-primary);
         }
 
-        /* Empty state lokal */
         .dashboard-empty {
           font-size: var(--font-size-sm);
           color: var(--color-text-muted);
@@ -395,10 +464,6 @@ export default function DashboardPage() {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .terlaris-kategori {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-        }
         .terlaris-stats { text-align: right; flex-shrink: 0; }
         .terlaris-terjual {
           font-size: var(--font-size-xs);
@@ -480,37 +545,6 @@ export default function DashboardPage() {
           flex-shrink: 0;
         }
 
-        /* ── Istirahat Widget ── */
-        .istirahat-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: var(--space-3);
-        }
-        .istirahat-item {
-          background: var(--color-bg);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-lg);
-          padding: var(--space-4);
-        }
-        .istirahat-label {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          margin-bottom: var(--space-2);
-          font-weight: var(--font-weight-medium);
-        }
-        .istirahat-nilai {
-          font-size: var(--font-size-xl);
-          font-weight: var(--font-weight-extrabold);
-          color: var(--color-text-primary);
-          font-family: 'Plus Jakarta Sans', var(--font-family);
-        }
-        .istirahat-trans {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          margin-top: var(--space-1);
-        }
-
-        /* Responsive */
         @media (max-width: 768px) {
           .grafik-bar-value { display: none; }
           .grafik-container { height: 120px; }

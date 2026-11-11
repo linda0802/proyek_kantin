@@ -104,8 +104,16 @@ export default function ReceiptModal({ transaksi, onClose, onTransaksiBaru }) {
             </div>
             <div className="receipt-row">
               <span>Pembayaran</span>
-              <span style={{ textTransform: 'capitalize' }}>{transaksi.metodePembayaran}</span>
+              <span style={{ textTransform: 'capitalize', fontWeight: transaksi.metodePembayaran === 'kasbon' ? 'bold' : 'normal', color: transaksi.metodePembayaran === 'kasbon' ? '#b45309' : 'inherit' }}>
+                {transaksi.metodePembayaran === 'kasbon' ? 'Kasbon / Hutang' : transaksi.metodePembayaran}
+              </span>
             </div>
+            {transaksi.metodePembayaran === 'kasbon' && transaksi.pelanggan && (
+              <div className="receipt-row">
+                <span>Pelanggan</span>
+                <span style={{ fontWeight: 'bold' }}>{transaksi.pelanggan}</span>
+              </div>
+            )}
             {transaksi.metodePembayaran === 'tunai' && (
               <>
                 <div className="receipt-row">
@@ -120,8 +128,17 @@ export default function ReceiptModal({ transaksi, onClose, onTransaksiBaru }) {
             )}
             <div className="receipt-divider" />
             <div className="receipt-center" style={{ fontSize: '11px' }}>
-              Terima kasih sudah berbelanja!<br/>
-              Simpan struk ini sebagai bukti pembayaran.
+              {transaksi.metodePembayaran === 'kasbon' ? (
+                <>
+                  BUKTI TRANSAKSI KASBON<br />
+                  Harap segera melakukan pelunasan di kantin.
+                </>
+              ) : (
+                <>
+                  Terima kasih sudah berbelanja!<br />
+                  Simpan struk ini sebagai bukti pembayaran.
+                </>
+              )}
             </div>
           </div>
         </div>

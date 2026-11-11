@@ -3,10 +3,10 @@ import { useAuth } from '../../context/AuthContext'
 
 /**
  * ProtectedRoute — Redirect ke /login jika belum login.
- * Menyimpan lokasi asal untuk redirect setelah login.
+ * Menegakkan izin akses role admin dan permission fitur individual (hutang, titipan).
  */
-export default function ProtectedRoute({ children, requireAdmin = false }) {
-  const { isAuthenticated, isAdmin } = useAuth()
+export default function ProtectedRoute({ children, requireAdmin = false, requirePermission = null }) {
+  const { isAuthenticated, isAdmin, hasPermission } = useAuth()
   const location = useLocation()
 
   if (!isAuthenticated) {
@@ -14,6 +14,10 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
   }
 
   if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />
+  }
+
+  if (requirePermission && !isAdmin && !hasPermission(requirePermission)) {
     return <Navigate to="/" replace />
   }
 

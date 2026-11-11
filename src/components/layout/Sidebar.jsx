@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
@@ -39,7 +40,7 @@ const OPTIONAL_ITEMS = [
 ]
 
 export default function Sidebar({ isOpen, onClose }) {
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const { settings } = useSettings()
   const location = useLocation()
 
@@ -48,8 +49,33 @@ export default function Sidebar({ isOpen, onClose }) {
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U'
 
-  // Optional nav items yang aktif
-  const activeOptional = OPTIONAL_ITEMS.filter(item => settings?.optionalFeatures?.[item.key])
+  // Fitur Opsional berbasis permission user individual (dan setting sistem)
+  const activeOptional = useMemo(() => {
+    const list = []
+
+    // Hutang / Kasbon — Tampil jika permission hutang ON
+    if (isAdmin || hasPermission('hutang')) {
+      list.push({ key: 'catatanUtang', to: '/utang', label: 'Catatan Hutang', icon: '📝' })
+    }
+
+    // Titipan — Tampil jika permission titipan ON
+    if (isAdmin || hasPermission('titipan')) {
+      list.push({ key: 'barangTitipan', to: '/titipan', label: 'Barang Titipan', icon: '🤝' })
+    }
+
+    // Fitur opsional tambahan jika diaktifkan di settings
+    if (settings?.optionalFeatures?.rekapIstirahat) {
+      list.push({ key: 'rekapIstirahat', to: '/laporan/istirahat', label: 'Rekap Istirahat', icon: '⏰' })
+    }
+    if (settings?.optionalFeatures?.makananTerbuang) {
+      list.push({ key: 'makananTerbuang', to: '/stok/terbuang', label: 'Makanan Terbuang', icon: '🗑️' })
+    }
+    if (settings?.optionalFeatures?.manajemenPemasok) {
+      list.push({ key: 'manajemenPemasok', to: '/pemasok', label: 'Pemasok', icon: '🚚' })
+    }
+
+    return list
+  }, [isAdmin, hasPermission, settings?.optionalFeatures])
 
   return (
     <aside className={`sidebar${isOpen ? ' open' : ''}`} role="navigation" aria-label="Navigasi utama">

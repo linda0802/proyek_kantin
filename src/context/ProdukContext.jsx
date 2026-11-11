@@ -1,88 +1,88 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { PRODUK as INITIAL_PRODUK, KATEGORI as INITIAL_KATEGORI } from '../data/mockData'
 
+const PRODUK_STORAGE_KEY = 'kantinku_produk'
+const KATEGORI_STORAGE_KEY = 'kantinku_kategori'
 const MUTASI_STORAGE_KEY = 'kantinku_mutasi'
 
-const today = new Date()
-const INITIAL_MUTASI = [
-  {
-    id: 'MUT-20261023-001',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 6, 30).toISOString(),
-    produkId: 1,
-    namaProduk: 'Nasi Goreng',
-    tipe: 'masuk',
-    jumlah: 30,
-    stokSebelum: 15,
-    stokSesudah: 45,
-    keterangan: 'Pemasok Dapur Utama (Stok Pagi)',
-    petugas: 'Admin',
-  },
-  {
-    id: 'MUT-20261023-002',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 15).toISOString(),
-    produkId: 5,
-    namaProduk: 'Es Teh Manis',
-    tipe: 'masuk',
-    jumlah: 50,
-    stokSebelum: 20,
-    stokSesudah: 70,
-    keterangan: 'Restock Bahan Es & Teh',
-    petugas: 'Siti Kasir',
-  },
-  {
-    id: 'MUT-20261023-003',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 45).toISOString(),
-    produkId: 7,
-    namaProduk: 'Air Mineral',
-    tipe: 'masuk',
-    jumlah: 48,
-    stokSebelum: 12,
-    stokSesudah: 60,
-    keterangan: 'Pengiriman 2 Dus Air Mineral PT Tirta',
-    petugas: 'Admin',
-  },
-  {
-    id: 'MUT-20261023-004',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 30).toISOString(),
-    produkId: 4,
-    namaProduk: 'Bakso',
-    tipe: 'penyesuaian',
-    jumlah: -2,
-    stokSebelum: 5,
-    stokSesudah: 3,
-    keterangan: 'Koreksi: 2 porsi kuah tumpah',
-    petugas: 'Siti Kasir',
-  },
-  {
-    id: 'MUT-20261023-005',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 11, 30).toISOString(),
-    produkId: 1,
-    namaProduk: 'Nasi Goreng',
-    tipe: 'keluar',
-    jumlah: -3,
-    stokSebelum: 45,
-    stokSesudah: 42,
-    keterangan: 'Penjualan Kasir (TRX-20261023-005)',
-    petugas: 'Siti Kasir',
-  },
+const DEFAULT_KATEGORI = [
+  { id: 1, nama: 'Makanan' },
+  { id: 2, nama: 'Minuman' },
+  { id: 3, nama: 'Camilan' },
+  { id: 4, nama: 'Lainnya' },
 ]
 
 const ProdukContext = createContext(null)
 
 export function ProdukProvider({ children }) {
-  const [produkList, setProdukList] = useState(INITIAL_PRODUK)
-  const [kategoriList, setKategoriList] = useState(INITIAL_KATEGORI)
+  // Produk dimulai KOSONG sesuai kebutuhan user
+  const [produkList, setProdukList] = useState(() => {
+    try {
+      const saved = localStorage.getItem(PRODUK_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // Jika data lama adalah data mock bawaan (12 produk dummy), bersihkan agar kosong
+        const isMock = Array.isArray(parsed) && parsed.length === 12 && parsed[0]?.nama === 'Nasi Goreng' && parsed[1]?.nama === 'Mie Goreng'
+        if (isMock) {
+          localStorage.removeItem(PRODUK_STORAGE_KEY)
+          return []
+        }
+        return Array.isArray(parsed) ? parsed : []
+      }
+    } catch (e) {
+      console.error('Error loading produk:', e)
+    }
+    return []
+  })
 
-  // Mutasi Stok
+  // Kategori Produk
+  const [kategoriList, setKategoriList] = useState(() => {
+    try {
+      const saved = localStorage.getItem(KATEGORI_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch (e) {
+      console.error('Error loading kategori:', e)
+    }
+    return DEFAULT_KATEGORI
+  })
+
+  // Mutasi Stok dimulai KOSONG (tanpa data mock)
   const [mutasiList, setMutasiList] = useState(() => {
     try {
       const saved = localStorage.getItem(MUTASI_STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        const isMock = Array.isArray(parsed) && parsed.some(m => m.id === 'MUT-20261023-001')
+        if (isMock) {
+          localStorage.removeItem(MUTASI_STORAGE_KEY)
+          return []
+        }
+        return Array.isArray(parsed) ? parsed : []
+      }
     } catch (e) {
       console.error('Error loading mutasi stok:', e)
     }
-    return INITIAL_MUTASI
+    return []
   })
+
+  // Sinkronisasi ke LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(PRODUK_STORAGE_KEY, JSON.stringify(produkList))
+    } catch (e) {
+      console.error('Error saving produk:', e)
+    }
+  }, [produkList])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KATEGORI_STORAGE_KEY, JSON.stringify(kategoriList))
+    } catch (e) {
+      console.error('Error saving kategori:', e)
+    }
+  }, [kategoriList])
 
   useEffect(() => {
     try {
@@ -96,12 +96,33 @@ export function ProdukProvider({ children }) {
   const tambahProduk = useCallback((data) => {
     setProdukList(prev => {
       const maxId = prev.reduce((m, p) => Math.max(m, p.id), 0)
-      return [...prev, { ...data, id: maxId + 1 }]
+      const newProduct = {
+        ...data,
+        id: maxId + 1,
+        stok: parseInt(data.stok, 10) || 0,
+        hargaJual: parseInt(data.hargaJual, 10) || 0,
+        hargaModal: parseInt(data.hargaModal, 10) || 0,
+        status: (parseInt(data.stok, 10) || 0) > 0 ? (data.status || 'tersedia') : 'habis',
+      }
+      return [...prev, newProduct]
     })
   }, [])
 
   const editProduk = useCallback((id, data) => {
-    setProdukList(prev => prev.map(p => p.id === id ? { ...p, ...data } : p))
+    setProdukList(prev =>
+      prev.map(p => {
+        if (p.id === id) {
+          const updatedStok = data.stok !== undefined ? parseInt(data.stok, 10) : p.stok
+          return {
+            ...p,
+            ...data,
+            stok: updatedStok,
+            status: updatedStok > 0 ? (data.status || p.status || 'tersedia') : 'habis',
+          }
+        }
+        return p
+      })
+    )
   }, [])
 
   const hapusProduk = useCallback((id) => {
@@ -167,7 +188,7 @@ export function ProdukProvider({ children }) {
 
     if (targetProduk) {
       const newMutasi = {
-        id: `MUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(mutasiList.length + 1).padStart(3, '0')}`,
+        id: `MUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-3)}`,
         tanggal: new Date().toISOString(),
         produkId: targetProduk.id,
         namaProduk: targetProduk.nama,
@@ -182,7 +203,7 @@ export function ProdukProvider({ children }) {
     }
 
     return { error: null }
-  }, [mutasiList.length])
+  }, [])
 
   // Penyesuaian Stok (Opname)
   const sesuaikanStok = useCallback(({ produkId, stokBaru, alasan, catatan, petugas }) => {
@@ -208,7 +229,7 @@ export function ProdukProvider({ children }) {
     if (targetProduk) {
       const selisih = n - targetProduk.stok
       const newMutasi = {
-        id: `MUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(mutasiList.length + 1).padStart(3, '0')}`,
+        id: `MUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-3)}`,
         tanggal: new Date().toISOString(),
         produkId: targetProduk.id,
         namaProduk: targetProduk.nama,
@@ -223,25 +244,56 @@ export function ProdukProvider({ children }) {
     }
 
     return { error: null }
-  }, [mutasiList.length])
+  }, [])
 
-  // Pengurangan Stok Otomatis saat Penjualan POS
+  // Pengurangan Stok Otomatis saat Penjualan POS (HANYA PRODUK KANTIN)
   const kurangiStokPenjualan = useCallback((items, nomorTransaksi, petugas) => {
-    items.forEach(item => {
-      setProdukList(prev =>
-        prev.map(p => {
-          if (p.id === item.produkId) {
-            const stokBaru = Math.max(0, p.stok - item.jumlah)
-            return {
-              ...p,
-              stok: stokBaru,
-              status: stokBaru === 0 ? 'habis' : p.status,
-            }
-          }
-          return p
+    setProdukList(prev =>
+      prev.map(p => {
+        const itemTerjual = items.find(i => {
+          const id = i.produkId ?? i.produk?.id
+          const isTitipan = i.isTitipan || i.produk?.isTitipan
+          return id === p.id && !isTitipan
         })
-      )
-    })
+
+        if (itemTerjual) {
+          const qty = itemTerjual.jumlah || 1
+          const stokBaru = Math.max(0, p.stok - qty)
+          return {
+            ...p,
+            stok: stokBaru,
+            status: stokBaru === 0 ? 'habis' : p.status,
+          }
+        }
+        return p
+      })
+    )
+
+    // Catat mutasi keluar
+    const mutasiKeluar = items
+      .filter(i => !(i.isTitipan || i.produk?.isTitipan))
+      .map((item, idx) => {
+        const pId = item.produkId ?? item.produk?.id
+        const pNama = item.nama ?? item.produk?.nama
+        const pStok = item.produk?.stok ?? 0
+        const qty = item.jumlah || 1
+        return {
+          id: `MUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now() + idx).slice(-3)}`,
+          tanggal: new Date().toISOString(),
+          produkId: pId,
+          namaProduk: pNama,
+          tipe: 'keluar',
+          jumlah: -qty,
+          stokSebelum: pStok,
+          stokSesudah: Math.max(0, pStok - qty),
+          keterangan: `Penjualan Kasir (${nomorTransaksi || 'TRX'})`,
+          petugas: petugas || 'Kasir',
+        }
+      })
+
+    if (mutasiKeluar.length > 0) {
+      setMutasiList(prev => [...mutasiKeluar, ...prev])
+    }
   }, [])
 
   return (

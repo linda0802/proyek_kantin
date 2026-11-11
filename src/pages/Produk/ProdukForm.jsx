@@ -166,18 +166,9 @@ export default function ProdukForm({ isOpen, onClose, onSave, produk, kategoriLi
               onChange={handleChange}
               error={errors.hargaModal}
               required
-              hint="Untuk kalkulasi estimasi laba"
+              hint="Harga kulak / modal pembelian"
             />
           </div>
-          {/* Estimasi laba per unit */}
-          {form.hargaJual && form.hargaModal && !errors.hargaJual && !errors.hargaModal && (
-            <div className="form-laba-preview" id="produk-form-laba-preview">
-              <span>💡 Estimasi laba per unit:</span>
-              <strong style={{ color: (parseInt(form.hargaJual) - parseInt(form.hargaModal)) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                Rp {(parseInt(form.hargaJual || 0) - parseInt(form.hargaModal || 0)).toLocaleString('id-ID')}
-              </strong>
-            </div>
-          )}
         </div>
 
         {/* ── Stok & Status ── */}

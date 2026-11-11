@@ -12,35 +12,7 @@ import { formatTanggalPanjang, formatTanggalPendek, formatTanggalWaktu, formatWa
 
 const TUTUP_KAS_STORAGE = 'kantinku_tutup_kas'
 
-const today = new Date()
-const INITIAL_RIWAYAT_TUTUP = [
-  {
-    id: 'TK-20261022-01',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 16, 0).toISOString(),
-    kasir: 'Siti Kasir',
-    modalAwal: 100000,
-    penjualanTunai: 145000,
-    penjualanNonTunai: 85000,
-    totalOmzet: 230000,
-    kasSeharusnya: 245000,
-    uangFisik: 245000,
-    selisih: 0,
-    catatan: 'Kas seimbang dan pas. Selesai shift.',
-  },
-  {
-    id: 'TK-20261021-01',
-    tanggal: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 16, 15).toISOString(),
-    kasir: 'Admin KantinKu',
-    modalAwal: 100000,
-    penjualanTunai: 210000,
-    penjualanNonTunai: 120000,
-    totalOmzet: 330000,
-    kasSeharusnya: 310000,
-    uangFisik: 312000,
-    selisih: 2000,
-    catatan: 'Lebih 2.000 (kembalian tidak diambil pembeli).',
-  },
-]
+const INITIAL_RIWAYAT_TUTUP = []
 
 export default function TutupKasPage() {
   const { transaksiList } = useTransaksiContext()
@@ -49,7 +21,7 @@ export default function TutupKasPage() {
   const { addToast } = useToast()
 
   // Form Tutup Kas Hari Ini
-  const [modalAwal, setModalAwal] = useState('100000')
+  const [modalAwal, setModalAwal] = useState('0')
   const [uangFisik, setUangFisik] = useState('')
   const [catatan, setCatatan] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -58,7 +30,16 @@ export default function TutupKasPage() {
   const [riwayatList, setRiwayatList] = useState(() => {
     try {
       const saved = localStorage.getItem(TUTUP_KAS_STORAGE)
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // Jika data lama adalah data dummy, bersihkan
+        const isDummy = Array.isArray(parsed) && parsed.some(r => r.id === 'TK-20261022-01' || r.kasir === 'Siti Kasir')
+        if (isDummy) {
+          localStorage.removeItem(TUTUP_KAS_STORAGE)
+          return []
+        }
+        return Array.isArray(parsed) ? parsed : []
+      }
     } catch (e) {
       console.error('Error loading riwayat tutup kas:', e)
     }

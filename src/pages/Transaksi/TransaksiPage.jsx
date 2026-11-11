@@ -327,6 +327,7 @@ export default function TransaksiPage() {
               { id: 'all', label: 'Semua Metode' },
               { id: 'tunai', label: '💵 Tunai' },
               { id: 'non-tunai', label: '📱 Non-Tunai' },
+              { id: 'kasbon', label: '📝 Kasbon' },
             ].map(m => (
               <button
                 key={m.id}
@@ -419,8 +420,8 @@ export default function TransaksiPage() {
                         </div>
                       </td>
                       <td>
-                        <Badge variant={t.metodePembayaran === 'tunai' ? 'primary' : 'info'}>
-                          {t.metodePembayaran === 'tunai' ? '💵 Tunai' : '📱 Non-Tunai'}
+                        <Badge variant={t.metodePembayaran === 'tunai' ? 'primary' : t.metodePembayaran === 'kasbon' ? 'warning' : 'info'}>
+                          {t.metodePembayaran === 'tunai' ? '💵 Tunai' : t.metodePembayaran === 'kasbon' ? `📝 Kasbon${t.pelanggan ? ` (${t.pelanggan})` : ''}` : '📱 Non-Tunai'}
                         </Badge>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 'var(--font-weight-bold)' }}>
@@ -494,8 +495,8 @@ export default function TransaksiPage() {
                 <div className="trx-card-body">
                   <div className="trx-card-meta">
                     <span>Kasir: <strong>{t.kasir || 'Kasir'}</strong></span>
-                    <Badge variant={t.metodePembayaran === 'tunai' ? 'primary' : 'info'}>
-                      {t.metodePembayaran === 'tunai' ? '💵 Tunai' : '📱 Non-Tunai'}
+                    <Badge variant={t.metodePembayaran === 'tunai' ? 'primary' : t.metodePembayaran === 'kasbon' ? 'warning' : 'info'}>
+                      {t.metodePembayaran === 'tunai' ? '💵 Tunai' : t.metodePembayaran === 'kasbon' ? `📝 Kasbon${t.pelanggan ? ` (${t.pelanggan})` : ''}` : '📱 Non-Tunai'}
                     </Badge>
                   </div>
 

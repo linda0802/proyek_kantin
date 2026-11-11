@@ -11,12 +11,12 @@ export default function PengaturanPage() {
 
   // Local Form State
   const [formData, setFormData] = useState({
-    namaToko: settings.namaToko || 'KantinKu SMAN 8',
-    alamat: settings.alamat || 'Jl. Pendidikan No. 8, Jakarta Selatan',
+    namaToko: settings.namaToko || 'KantinKu — Kantin Sekolah',
+    alamat: settings.alamat || 'Kabupaten Bogor, Jawa Barat',
     telepon: settings.telepon || '0812-3456-7890',
     pesanKakiStruk: settings.pesanKakiStruk || 'Terima kasih atas kunjungan Anda! Makanan sehat, belajar semangat.',
     mataPembayaranDefault: settings.mataPembayaranDefault || 'tunai',
-    modalAwalDefault: settings.modalAwalDefault || 100000,
+    modalAwalDefault: settings.modalAwalDefault || 0,
     stokMinimumDefault: settings.stokMinimumDefault || 5,
     autoPrintReceipt: settings.autoPrintReceipt ?? true,
     showKasirOnReceipt: settings.showKasirOnReceipt ?? true,
@@ -26,12 +26,12 @@ export default function PengaturanPage() {
 
   useEffect(() => {
     setFormData({
-      namaToko: settings.namaToko || 'KantinKu SMAN 8',
-      alamat: settings.alamat || 'Jl. Pendidikan No. 8, Jakarta Selatan',
+      namaToko: settings.namaToko || 'KantinKu — Kantin Sekolah',
+      alamat: settings.alamat || 'Kabupaten Bogor, Jawa Barat',
       telepon: settings.telepon || '0812-3456-7890',
       pesanKakiStruk: settings.pesanKakiStruk || 'Terima kasih atas kunjungan Anda! Makanan sehat, belajar semangat.',
       mataPembayaranDefault: settings.mataPembayaranDefault || 'tunai',
-      modalAwalDefault: settings.modalAwalDefault || 100000,
+      modalAwalDefault: settings.modalAwalDefault || 0,
       stokMinimumDefault: settings.stokMinimumDefault || 5,
       autoPrintReceipt: settings.autoPrintReceipt ?? true,
       showKasirOnReceipt: settings.showKasirOnReceipt ?? true,
@@ -130,7 +130,7 @@ export default function PengaturanPage() {
                 name="namaToko"
                 value={formData.namaToko}
                 onChange={handleChange}
-                placeholder="Contoh: KantinKu SMAN 8 Jakarta"
+                placeholder="Contoh: Kantin Sekolah Kabupaten Bogor"
                 required
                 id="input-nama-toko"
               />
@@ -153,7 +153,7 @@ export default function PengaturanPage() {
                 name="alamat"
                 value={formData.alamat}
                 onChange={handleChange}
-                placeholder="Contoh: Jl. Pendidikan No. 8, Tebet, Jakarta Selatan"
+                placeholder="Contoh: Kabupaten Bogor, Jawa Barat"
                 id="input-alamat"
               />
             </div>

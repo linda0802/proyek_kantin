@@ -97,12 +97,6 @@ export default function LoginPage() {
             {loading ? 'Masuk...' : 'Masuk'}
           </Button>
         </form>
-
-        {/* Demo hint */}
-        <div className="login-demo">
-          <p>Demo: <strong>admin</strong> / <strong>admin123</strong></p>
-          <p>Kasir: <strong>kasir</strong> / <strong>kasir123</strong></p>
-        </div>
       </div>
 
       <style>{`
@@ -154,17 +148,6 @@ export default function LoginPage() {
           font-size: var(--font-size-sm);
           margin-bottom: var(--space-4);
         }
-        .login-demo {
-          margin-top: var(--space-6);
-          padding: var(--space-3) var(--space-4);
-          background: var(--color-primary-subtle);
-          border-radius: var(--radius-md);
-          border: 1px dashed var(--color-border-strong);
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          line-height: var(--line-height-relaxed);
-        }
-        .login-demo strong { color: var(--color-primary); }
       `}</style>
     </div>
   )

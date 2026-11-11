@@ -101,6 +101,20 @@
   transform: translateY(-1px);
 }
 
+/* Warning (Kasbon) */
+.btn-warning {
+  background: #d97706;
+  color: #ffffff;
+  border-color: #d97706;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.25);
+}
+.btn-warning:hover:not(:disabled) {
+  background: #b45309;
+  border-color: #b45309;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.35);
+  transform: translateY(-1px);
+}
+
 /* Icon-only */
 .btn-icon {
   padding: var(--space-2);

@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import { TRANSAKSI_HARI_INI } from '../data/mockData'
 import { hitungKembalian } from '../utils/currency'
 import { generateNomorTransaksi } from '../utils/date'
 
@@ -13,20 +12,17 @@ export function TransaksiProvider({ children }) {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        // Gabungkan parsed dengan mock data bawaan yang belum ada di localStorage
-        const ids = new Set(parsed.map(t => t.id))
-        const combined = [...parsed]
-        TRANSAKSI_HARI_INI.forEach(item => {
-          if (!ids.has(item.id)) {
-            combined.push(item)
-          }
-        })
-        return combined
+        // Jika data lama adalah data mock (ID dimulai TRX-20261023), bersihkan
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.id?.startsWith('TRX-20261023')) {
+          localStorage.removeItem(STORAGE_KEY)
+          return []
+        }
+        return Array.isArray(parsed) ? parsed : []
       }
     } catch (e) {
       console.error('Error loading transaksi:', e)
     }
-    return TRANSAKSI_HARI_INI
+    return []
   })
 
   // Sinkronkan ke localStorage setiap kali transaksiList berubah
@@ -39,7 +35,9 @@ export function TransaksiProvider({ children }) {
   }, [transaksiList])
 
   // Simpan transaksi baru dari POS
-  const simpanTransaksi = useCallback(({ items, total, metodePembayaran, uangDiterima, kasir }) => {
+  // metodePembayaran: 'tunai' | 'non-tunai' | 'kasbon'
+  // pelanggan: nama pelanggan (hanya untuk kasbon)
+  const simpanTransaksi = useCallback(({ items, total, metodePembayaran, uangDiterima, kasir, pelanggan }) => {
     const nomorTransaksi = generateNomorTransaksi(transaksiList.length + 1)
 
     const transaksiBaru = {
@@ -47,6 +45,7 @@ export function TransaksiProvider({ children }) {
       tanggal: new Date().toISOString(),
       kasir: kasir || 'Kasir',
       metodePembayaran,
+      pelanggan: pelanggan || null,
       uangDiterima: metodePembayaran === 'tunai' ? Number(uangDiterima) : Number(total),
       kembalian: metodePembayaran === 'tunai' ? hitungKembalian(total, uangDiterima) : 0,
       total: Number(total),
@@ -58,6 +57,7 @@ export function TransaksiProvider({ children }) {
         hargaModal: i.produk.hargaModal || Math.round(i.produk.hargaJual * 0.7),
         jumlah: i.jumlah,
         subtotal: i.produk.hargaJual * i.jumlah,
+        isTitipan: i.produk.isTitipan || false,
       })),
     }
 

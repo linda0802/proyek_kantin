@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react'
 import Button from '../../components/ui/Button'
 import { formatRupiah, hitungKembalian, parseRupiah } from '../../utils/currency'
-
-const METODE = [
-  { id: 'tunai', label: 'Tunai', icon: '💵' },
-  { id: 'non-tunai', label: 'Non-Tunai', icon: '💳' },
-]
+import { useAuth } from '../../context/AuthContext'
 
 /**
  * Cart — Panel kanan POS
  * Daftar item keranjang + qty control + pembayaran
+ * Metode: Tunai | Non-Tunai | Kasbon (hanya jika hasPermission('hutang'))
  */
 export default function Cart({
   items,
@@ -23,15 +20,36 @@ export default function Cart({
   onBayar,
   loading,
 }) {
+  const { hasPermission } = useAuth()
+  const bolehHutang = hasPermission('hutang')
+
+  // Metode pembayaran yang tersedia
+  const METODE = [
+    { id: 'tunai', label: 'Tunai', icon: '💵' },
+    { id: 'non-tunai', label: 'Non-Tunai', icon: '💳' },
+    ...(bolehHutang ? [{ id: 'kasbon', label: 'Kasbon', icon: '📝' }] : []),
+  ]
+
   const [metode, setMetode] = useState('tunai')
   const [uangDiterima, setUangDiterima] = useState('')
   const [uangError, setUangError] = useState('')
+  const [namaPelanggan, setNamaPelanggan] = useState('')
+  const [namaPelangganError, setNamaPelangganError] = useState('')
 
-  // Reset uang diterima saat metode berubah
+  // Reset saat metode berubah
   useEffect(() => {
     setUangDiterima('')
     setUangError('')
+    setNamaPelanggan('')
+    setNamaPelangganError('')
   }, [metode])
+
+  // Jika permission hutang dicabut saat sedang kasbon, kembali ke tunai
+  useEffect(() => {
+    if (metode === 'kasbon' && !bolehHutang) {
+      setMetode('tunai')
+    }
+  }, [bolehHutang, metode])
 
   // Nominal cepat (tunai)
   const NOMINAL_CEPAT = [5000, 10000, 20000, 50000, 100000]
@@ -52,8 +70,15 @@ export default function Cart({
         return
       }
     }
+    if (metode === 'kasbon') {
+      if (!namaPelanggan.trim()) {
+        setNamaPelangganError('Nama pelanggan wajib diisi untuk transaksi Kasbon.')
+        return
+      }
+    }
     setUangError('')
-    onBayar({ metode, uangDiterima: uangDiterimaNominal })
+    setNamaPelangganError('')
+    onBayar({ metode, uangDiterima: uangDiterimaNominal, pelanggan: namaPelanggan.trim() || null })
   }
 
   const handleUangChange = (e) => {
@@ -173,11 +198,16 @@ export default function Cart({
 
           {/* Metode Pembayaran */}
           <div className="pos-metode-label">Metode Pembayaran</div>
-          <div className="pos-metode-group" role="radiogroup" aria-label="Metode pembayaran">
+          <div
+            className="pos-metode-group"
+            role="radiogroup"
+            aria-label="Metode pembayaran"
+            style={{ gridTemplateColumns: bolehHutang ? '1fr 1fr 1fr' : '1fr 1fr' }}
+          >
             {METODE.map(m => (
               <button
                 key={m.id}
-                className={`pos-metode-btn${metode === m.id ? ' active' : ''}`}
+                className={`pos-metode-btn${metode === m.id ? ' active' : ''}${m.id === 'kasbon' ? ' metode-kasbon' : ''}`}
                 id={`pos-metode-${m.id}`}
                 role="radio"
                 aria-checked={metode === m.id}
@@ -250,9 +280,33 @@ export default function Cart({
             </div>
           )}
 
+          {/* Input Nama Pelanggan (hanya kasbon) */}
+          {metode === 'kasbon' && (
+            <div className="pos-kasbon-section" id="pos-kasbon-section">
+              <div className="pos-kasbon-info">
+                📝 Transaksi ini akan dicatat sebagai <strong>Hutang/Kasbon</strong> dan otomatis masuk ke Catatan Hutang.
+              </div>
+              <label className="pos-field-label" htmlFor="pos-nama-pelanggan">
+                Nama Pelanggan <span style={{ color: 'var(--color-danger)' }}>*</span>
+              </label>
+              <input
+                type="text"
+                id="pos-nama-pelanggan"
+                className={`pos-uang-input${namaPelangganError ? ' error' : ''}`}
+                placeholder="Masukkan nama pelanggan..."
+                value={namaPelanggan}
+                onChange={e => { setNamaPelanggan(e.target.value); setNamaPelangganError('') }}
+                style={{ width: '100%', border: '2px solid var(--color-border-input)', borderRadius: 'var(--radius-md)', padding: '0 var(--space-3)', height: '40px', fontSize: 'var(--font-size-sm)', background: 'var(--color-surface)' }}
+              />
+              {namaPelangganError && (
+                <p className="pos-uang-error" role="alert">{namaPelangganError}</p>
+              )}
+            </div>
+          )}
+
           {/* Tombol Bayar */}
           <Button
-            variant="primary"
+            variant={metode === 'kasbon' ? 'warning' : 'primary'}
             fullWidth
             size="lg"
             id="pos-bayar-btn"
@@ -260,7 +314,12 @@ export default function Cart({
             loading={loading}
             style={{ marginTop: 'var(--space-4)' }}
           >
-            {loading ? 'Memproses...' : `💳 Bayar ${formatRupiah(subTotal)}`}
+            {loading
+              ? 'Memproses...'
+              : metode === 'kasbon'
+              ? `📝 Catat Kasbon ${formatRupiah(subTotal)}`
+              : `💳 Bayar ${formatRupiah(subTotal)}`
+            }
           </Button>
         </div>
       )}

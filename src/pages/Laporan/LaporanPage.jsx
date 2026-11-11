@@ -5,16 +5,17 @@ import { useToast } from '../../context/ToastContext'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import { Select, Input } from '../../components/ui/Input'
+import { EmptyState } from '../../components/shared/EmptyState'
 import { formatRupiah, formatNumber } from '../../utils/currency'
-import { formatTanggalPendek, formatTanggalPanjang, formatTanggalWaktu, formatWaktu } from '../../utils/date'
+import { formatTanggalPendek, formatTanggalPanjang, formatWaktu } from '../../utils/date'
 
 export default function LaporanPage() {
   const { transaksiList } = useTransaksiContext()
-  const { produkList, kategoriList, getNamaKategori } = useProduk()
+  const { kategoriList, getNamaKategori } = useProduk()
   const { addToast } = useToast()
 
-  // State Tabs
-  const [activeTab, setActiveTab] = useState('ringkasan') // 'ringkasan' | 'produk' | 'kategori' | 'metode'
+  // State Tabs — 'Performa Produk' sudah dihapus sesuai instruksi
+  const [activeTab, setActiveTab] = useState('ringkasan') // 'ringkasan' | 'kategori' | 'metode'
 
   // State Filter Periode
   const [periodeType, setPeriodeType] = useState('hari-ini') // 'hari-ini' | '7-hari' | '30-hari' | 'custom'
@@ -35,12 +36,11 @@ export default function LaporanPage() {
     return Array.from(kasirSet)
   }, [transaksiList])
 
-  // Filter transaksi berdasarkan periode & kasir
+  // Filter transaksi berdasarkan periode & kasir (Hanya transaksi 'selesai')
   const filteredTransaksi = useMemo(() => {
     const now = new Date()
 
     return transaksiList.filter(t => {
-      // Hanya transaksi yang 'selesai' dihitung omzet
       if (t.status !== 'selesai') return false
 
       // Filter Kasir
@@ -69,71 +69,28 @@ export default function LaporanPage() {
     })
   }, [transaksiList, periodeType, customStartDate, customEndDate, filterKasir])
 
-  // Kalkulasi KPI Agregat
+  // Kalkulasi KPI Penjualan
   const kpi = useMemo(() => {
     let totalOmzet = 0
-    let totalModal = 0
     let totalItemTerjual = 0
 
     filteredTransaksi.forEach(t => {
-      totalOmzet += t.total
+      totalOmzet += t.total || 0
       t.items?.forEach(i => {
-        totalItemTerjual += i.jumlah
-        const modalUnit = i.hargaModal || Math.round(i.hargaJual * 0.7)
-        totalModal += modalUnit * i.jumlah
+        totalItemTerjual += i.jumlah || 0
       })
     })
 
-    const totalLaba = totalOmzet - totalModal
-    const marginLaba = totalOmzet > 0 ? Math.round((totalLaba / totalOmzet) * 100) : 0
     const totalTrx = filteredTransaksi.length
     const aov = totalTrx > 0 ? Math.round(totalOmzet / totalTrx) : 0
 
     return {
       totalOmzet,
-      totalModal,
-      totalLaba,
-      marginLaba,
       totalTrx,
       totalItemTerjual,
       aov,
     }
   }, [filteredTransaksi])
-
-  // Agregasi Penjualan Per Produk
-  const produkReport = useMemo(() => {
-    const map = {}
-
-    filteredTransaksi.forEach(t => {
-      t.items?.forEach(i => {
-        const pId = i.produkId || i.nama
-        if (!map[pId]) {
-          const ref = produkList.find(p => p.id === i.produkId)
-          map[pId] = {
-            id: i.produkId,
-            nama: i.nama,
-            kategoriId: ref?.kategoriId || 1,
-            hargaJual: i.hargaJual,
-            hargaModal: i.hargaModal || ref?.hargaModal || Math.round(i.hargaJual * 0.7),
-            terjual: 0,
-            omzet: 0,
-            modal: 0,
-          }
-        }
-        map[pId].terjual += i.jumlah
-        map[pId].omzet += i.hargaJual * i.jumlah
-        map[pId].modal += (map[pId].hargaModal) * i.jumlah
-      })
-    })
-
-    return Object.values(map)
-      .map(item => {
-        const laba = item.omzet - item.modal
-        const margin = item.omzet > 0 ? Math.round((laba / item.omzet) * 100) : 0
-        return { ...item, laba, margin }
-      })
-      .sort((a, b) => b.omzet - a.omzet)
-  }, [filteredTransaksi, produkList])
 
   // Agregasi Penjualan Per Kategori
   const kategoriReport = useMemo(() => {
@@ -142,16 +99,19 @@ export default function LaporanPage() {
       map[k.id] = { id: k.id, nama: k.nama, terjual: 0, omzet: 0 }
     })
 
-    produkReport.forEach(p => {
-      if (map[p.kategoriId]) {
-        map[p.kategoriId].terjual += p.terjual
-        map[p.kategoriId].omzet += p.omzet
-      } else {
-        const fallbackId = 99
-        if (!map[fallbackId]) map[fallbackId] = { id: fallbackId, nama: 'Lainnya', terjual: 0, omzet: 0 }
-        map[fallbackId].terjual += p.terjual
-        map[fallbackId].omzet += p.omzet
-      }
+    filteredTransaksi.forEach(t => {
+      t.items?.forEach(i => {
+        const katId = i.kategoriId || 1
+        if (map[katId]) {
+          map[katId].terjual += i.jumlah || 0
+          map[katId].omzet += (i.hargaJual || 0) * (i.jumlah || 0)
+        } else {
+          const fallbackId = 99
+          if (!map[fallbackId]) map[fallbackId] = { id: fallbackId, nama: 'Lainnya', terjual: 0, omzet: 0 }
+          map[fallbackId].terjual += i.jumlah || 0
+          map[fallbackId].omzet += (i.hargaJual || 0) * (i.jumlah || 0)
+        }
+      })
     })
 
     const totalAllOmzet = kpi.totalOmzet || 1
@@ -162,7 +122,7 @@ export default function LaporanPage() {
         persentase: Math.round((k.omzet / totalAllOmzet) * 100),
       }))
       .sort((a, b) => b.omzet - a.omzet)
-  }, [produkReport, kategoriList, kpi.totalOmzet])
+  }, [filteredTransaksi, kategoriList, kpi.totalOmzet])
 
   // Agregasi Metode Pembayaran
   const metodeReport = useMemo(() => {
@@ -170,13 +130,18 @@ export default function LaporanPage() {
     let tunaiTrx = 0
     let nonTunaiOmzet = 0
     let nonTunaiTrx = 0
+    let kasbonOmzet = 0
+    let kasbonTrx = 0
 
     filteredTransaksi.forEach(t => {
       if (t.metodePembayaran === 'tunai') {
-        tunaiOmzet += t.total
+        tunaiOmzet += t.total || 0
         tunaiTrx += 1
+      } else if (t.metodePembayaran === 'kasbon') {
+        kasbonOmzet += t.total || 0
+        kasbonTrx += 1
       } else {
-        nonTunaiOmzet += t.total
+        nonTunaiOmzet += t.total || 0
         nonTunaiTrx += 1
       }
     })
@@ -193,13 +158,17 @@ export default function LaporanPage() {
         trx: nonTunaiTrx,
         persen: Math.round((nonTunaiOmzet / totalAll) * 100),
       },
+      kasbon: {
+        omzet: kasbonOmzet,
+        trx: kasbonTrx,
+        persen: Math.round((kasbonOmzet / totalAll) * 100),
+      },
     }
   }, [filteredTransaksi, kpi.totalOmzet])
 
   // Data Tren Grafik Penjualan (Harian atau Per Jam)
   const chartData = useMemo(() => {
     if (periodeType === 'hari-ini') {
-      // Distribusi per jam (07:00 - 15:00)
       const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00']
       const dataMap = {}
       hours.forEach(h => { dataMap[h] = 0 })
@@ -208,7 +177,7 @@ export default function LaporanPage() {
         const hour = new Date(t.tanggal).getHours()
         const key = `${String(hour).padStart(2, '0')}:00`
         if (dataMap[key] !== undefined) {
-          dataMap[key] += t.total
+          dataMap[key] += t.total || 0
         }
       })
 
@@ -219,11 +188,10 @@ export default function LaporanPage() {
         pct: Math.round((dataMap[h] / maxVal) * 100),
       }))
     } else {
-      // Distribusi per hari
       const daysMap = {}
       filteredTransaksi.forEach(t => {
         const d = new Date(t.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
-        daysMap[d] = (daysMap[d] || 0) + t.total
+        daysMap[d] = (daysMap[d] || 0) + (t.total || 0)
       })
 
       const entries = Object.entries(daysMap)
@@ -277,23 +245,21 @@ export default function LaporanPage() {
     win.close()
   }
 
-  // Ekspor CSV
+  // Ekspor CSV Laporan Transaksi
   const handleExportCSV = () => {
-    if (produkReport.length === 0) {
+    if (filteredTransaksi.length === 0) {
       addToast({ type: 'info', title: 'Tidak ada data', message: 'Tidak ada data penjualan untuk diekspor.' })
       return
     }
 
-    const headers = ['Nama Produk', 'Kategori', 'Harga Jual', 'Harga Modal', 'Terjual (Unit)', 'Total Omzet', 'Laba Kotor', 'Margin (%)']
-    const rows = produkReport.map(p => [
-      `"${p.nama}"`,
-      `"${getNamaKategori(p.kategoriId)}"`,
-      p.hargaJual,
-      p.hargaModal,
-      p.terjual,
-      p.omzet,
-      p.laba,
-      `${p.margin}%`,
+    const headers = ['No Transaksi', 'Tanggal', 'Kasir', 'Metode Pembayaran', 'Pelanggan', 'Total Omzet']
+    const rows = filteredTransaksi.map(t => [
+      `"${t.id}"`,
+      `"${formatTanggalPendek(t.tanggal)}"`,
+      `"${t.kasir}"`,
+      `"${t.metodePembayaran}"`,
+      `"${t.pelanggan || '-'}"`,
+      t.total,
     ].join(','))
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n')
@@ -325,7 +291,7 @@ export default function LaporanPage() {
             <Badge variant="primary" dot>{periodeLabel}</Badge>
           </div>
           <p className="page-subtitle">
-            Rekap omzet, laba kotor, performa menu terlaris, dan analisa metode pembayaran kantin sekolah.
+            Rekap omzet, volume transaksi harian, dan analisa metode pembayaran kantin sekolah.
           </p>
         </div>
 
@@ -398,7 +364,7 @@ export default function LaporanPage() {
         </div>
       </div>
 
-      {/* ── KPI Metric Cards ── */}
+      {/* ── KPI Metric Cards (Fokus pada Penjualan, tanpa estimasi laba kotor) ── */}
       <div className="laporan-stats-grid">
         <div className="laporan-stat-card">
           <div className="laporan-stat-icon stat-icon--success" aria-hidden="true">💵</div>
@@ -412,13 +378,13 @@ export default function LaporanPage() {
         </div>
 
         <div className="laporan-stat-card">
-          <div className="laporan-stat-icon stat-icon--primary" aria-hidden="true">📈</div>
+          <div className="laporan-stat-icon stat-icon--primary" aria-hidden="true">🛒</div>
           <div className="laporan-stat-content">
-            <div className="laporan-stat-label">Estimasi Laba Kotor</div>
+            <div className="laporan-stat-label">Total Transaksi</div>
             <div className="laporan-stat-value" style={{ color: 'var(--color-primary)' }}>
-              {formatRupiah(kpi.totalLaba)}
+              {kpi.totalTrx}
             </div>
-            <div className="laporan-stat-sub">Margin Laba: {kpi.marginLaba}%</div>
+            <div className="laporan-stat-sub">Struk belanja selesai</div>
           </div>
         </div>
 
@@ -427,18 +393,18 @@ export default function LaporanPage() {
           <div className="laporan-stat-content">
             <div className="laporan-stat-label">Total Item Terjual</div>
             <div className="laporan-stat-value">{formatNumber(kpi.totalItemTerjual)}</div>
-            <div className="laporan-stat-sub">Rata-rata: {formatRupiah(kpi.aov)} / struk</div>
+            <div className="laporan-stat-sub">Produk kantin & titipan</div>
           </div>
         </div>
 
         <div className="laporan-stat-card">
           <div className="laporan-stat-icon stat-icon--warning" aria-hidden="true">🏷️</div>
           <div className="laporan-stat-content">
-            <div className="laporan-stat-label">Total Modal Pokok (HPP)</div>
+            <div className="laporan-stat-label">Rata-Rata per Transaksi</div>
             <div className="laporan-stat-value" style={{ fontSize: 'var(--font-size-xl)' }}>
-              {formatRupiah(kpi.totalModal)}
+              {formatRupiah(kpi.aov)}
             </div>
-            <div className="laporan-stat-sub">Biaya bahan baku modal</div>
+            <div className="laporan-stat-sub">Rata-rata belanja per struk</div>
           </div>
         </div>
       </div>
@@ -452,13 +418,6 @@ export default function LaporanPage() {
             id="tab-ringkasan"
           >
             📊 Tren & Grafik
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'produk' ? 'active' : ''}`}
-            onClick={() => setActiveTab('produk')}
-            id="tab-produk"
-          >
-            🍽️ Performa Produk ({produkReport.length})
           </button>
           <button
             className={`tab-btn ${activeTab === 'kategori' ? 'active' : ''}`}
@@ -514,67 +473,7 @@ export default function LaporanPage() {
         </div>
       )}
 
-      {/* ── TAB 2: PERFORMA PRODUK TERLARIS ── */}
-      {activeTab === 'produk' && (
-        <div className="tab-pane">
-          {produkReport.length === 0 ? (
-            <div className="card" style={{ padding: 0 }}>
-              <EmptyState icon="🍽️" title="Tidak ada penjualan produk" description="Belum ada produk yang terjual pada periode ini." />
-            </div>
-          ) : (
-            <div className="card table-card">
-              <div className="table-responsive">
-                <table className="laporan-table" id="table-laporan-produk">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '40px' }}>Rank</th>
-                      <th>Nama Produk</th>
-                      <th>Kategori</th>
-                      <th style={{ textAlign: 'center' }}>Qty Terjual</th>
-                      <th style={{ textAlign: 'right' }}>Harga Jual</th>
-                      <th style={{ textAlign: 'right' }}>Total Omzet</th>
-                      <th style={{ textAlign: 'right' }}>Laba Kotor</th>
-                      <th style={{ textAlign: 'center' }}>Margin (%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {produkReport.map((p, idx) => (
-                      <tr key={idx}>
-                        <td className="col-rank">
-                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
-                        </td>
-                        <td style={{ fontWeight: 'var(--font-weight-semibold)' }}>{p.nama}</td>
-                        <td>
-                          <span className="kategori-tag">{getNamaKategori(p.kategoriId)}</span>
-                        </td>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                          {formatNumber(p.terjual)} unit
-                        </td>
-                        <td style={{ textAlign: 'right', color: 'var(--color-text-muted)' }}>
-                          {formatRupiah(p.hargaJual)}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                          {formatRupiah(p.omzet)}
-                        </td>
-                        <td style={{ textAlign: 'right', color: 'var(--color-success)', fontWeight: 'bold' }}>
-                          +{formatRupiah(p.laba)}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <Badge variant={p.margin >= 30 ? 'success' : 'neutral'}>
-                            {p.margin}%
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── TAB 3: PENJUALAN KATEGORI ── */}
+      {/* ── TAB 2: PENJUALAN KATEGORI ── */}
       {activeTab === 'kategori' && (
         <div className="tab-pane">
           <div className="card" style={{ padding: 'var(--space-6)' }}>
@@ -599,7 +498,7 @@ export default function LaporanPage() {
         </div>
       )}
 
-      {/* ── TAB 4: METODE PEMBAYARAN ── */}
+      {/* ── TAB 3: METODE PEMBAYARAN ── */}
       {activeTab === 'metode' && (
         <div className="tab-pane">
           <div className="metode-cards-grid">
@@ -636,6 +535,23 @@ export default function LaporanPage() {
                 <div className="metode-share-text">Pangsa Metode: {metodeReport.nonTunai.persen}%</div>
               </div>
             </div>
+
+            <div className="card metode-card">
+              <div className="metode-card-top">
+                <span className="metode-icon">📝</span>
+                <div>
+                  <h4 className="metode-title">Kasbon / Hutang</h4>
+                  <span className="metode-trx-count">{metodeReport.kasbon.trx} Transaksi Selesai</span>
+                </div>
+              </div>
+              <div className="metode-amount">{formatRupiah(metodeReport.kasbon.omzet)}</div>
+              <div className="metode-progress-box">
+                <div className="progress-bar-track">
+                  <div className="progress-bar-fill fill--amber" style={{ width: `${metodeReport.kasbon.persen}%` }}></div>
+                </div>
+                <div className="metode-share-text">Pangsa Metode: {metodeReport.kasbon.persen}%</div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -644,9 +560,9 @@ export default function LaporanPage() {
       <div style={{ display: 'none' }}>
         <div ref={printAreaRef}>
           <div className="header-kop">
-            <h2>KANTINKU — KANTIN SEHAT SMAN 8</h2>
-            <p>Jalan Pendidikan No. 8, Jakarta Selatan • Telp: (021) 7890-1234</p>
-            <h3 style={{ marginTop: '10px', textTransform: 'uppercase' }}>Laporan Resmi Penjualan & Laba Kantin</h3>
+            <h2>KANTINKU — KANTIN SEKOLAH</h2>
+            <p>Kabupaten Bogor • Sistem Informasi Penjualan Kantin</p>
+            <h3 style={{ marginTop: '10px', textTransform: 'uppercase' }}>Laporan Resmi Penjualan Kantin</h3>
           </div>
 
           <div className="meta-info">
@@ -655,64 +571,36 @@ export default function LaporanPage() {
             <p><strong>Filter Petugas:</strong> {filterKasir === 'all' ? 'Semua Kasir' : filterKasir}</p>
           </div>
 
-          <h4 style={{ marginBottom: '8px' }}>I. Ringkasan Eksekutif Finansial</h4>
+          <h4 style={{ marginBottom: '8px' }}>I. Ringkasan Finansial Penjualan</h4>
           <table className="kpi-table">
             <thead>
               <tr>
                 <th>Total Omzet Penjualan</th>
-                <th>Total Modal Pokok (HPP)</th>
-                <th>Laba Kotor</th>
-                <th>Margin (%)</th>
-                <th>Total Transaksi</th>
+                <th>Total Transaksi Selesai</th>
+                <th>Total Item Terjual</th>
+                <th>Rata-Rata per Struk</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><strong>{formatRupiah(kpi.totalOmzet)}</strong></td>
-                <td>{formatRupiah(kpi.totalModal)}</td>
-                <td><strong style={{ color: 'green' }}>{formatRupiah(kpi.totalLaba)}</strong></td>
-                <td>{kpi.marginLaba}%</td>
                 <td>{kpi.totalTrx} Struk</td>
+                <td>{kpi.totalItemTerjual} Unit</td>
+                <td>{formatRupiah(kpi.aov)}</td>
               </tr>
-            </tbody>
-          </table>
-
-          <h4 style={{ marginTop: '20px', marginBottom: '8px' }}>II. Rincian Penjualan Produk</h4>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: '30px' }}>No</th>
-                <th>Nama Produk</th>
-                <th className="text-center">Qty Terjual</th>
-                <th className="text-right">Harga Jual</th>
-                <th className="text-right">Total Omzet</th>
-                <th className="text-right">Laba Kotor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {produkReport.map((p, idx) => (
-                <tr key={idx}>
-                  <td className="text-center">{idx + 1}</td>
-                  <td>{p.nama}</td>
-                  <td className="text-center">{p.terjual}</td>
-                  <td className="text-right">Rp {p.hargaJual.toLocaleString('id-ID')}</td>
-                  <td className="text-right">Rp {p.omzet.toLocaleString('id-ID')}</td>
-                  <td className="text-right">Rp {p.laba.toLocaleString('id-ID')}</td>
-                </tr>
-              ))}
             </tbody>
           </table>
 
           <div className="ttd-section">
             <div className="ttd-box">
               <p>Mengetahui,</p>
-              <p><strong>Kepala Pengelola Kantin</strong></p>
+              <p><strong>Pengelola Kantin</strong></p>
               <div className="ttd-space"></div>
               <p>( _______________________ )</p>
             </div>
             <div className="ttd-box">
-              <p>Jakarta, {formatTanggalPendek(new Date())}</p>
-              <p><strong>Kasir / Petugas Laporan</strong></p>
+              <p>Kabupaten Bogor, {formatTanggalPendek(new Date())}</p>
+              <p><strong>Kasir / Petugas</strong></p>
               <div className="ttd-space"></div>
               <p>( _______________________ )</p>
             </div>
@@ -720,382 +608,102 @@ export default function LaporanPage() {
         </div>
       </div>
 
-      {/* ── Scoped Styling ── */}
       <style>{`
-        .laporan-page {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-6);
-        }
+        .laporan-page { display: flex; flex-direction: column; gap: var(--space-6); }
+        .laporan-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); }
+        .laporan-header-title-row { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-1); }
+        .laporan-header-actions { display: flex; align-items: center; gap: var(--space-3); }
 
-        /* Header */
-        .laporan-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: var(--space-4);
-        }
-        .laporan-header-title-row {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-          margin-bottom: var(--space-1);
-        }
-        .laporan-header-actions {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-        }
-
-        /* Controls Card */
         .laporan-controls-card {
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-xl);
-          padding: var(--space-4) var(--space-5);
+          background: var(--color-surface); border: 1px solid var(--color-border);
+          border-radius: var(--radius-xl); padding: var(--space-4) var(--space-5);
           box-shadow: var(--shadow-sm);
         }
-        .controls-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: var(--space-4);
-        }
+        .controls-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); }
         .period-pill-group {
-          display: flex;
-          background: var(--color-surface-sunken);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-lg);
-          padding: 3px;
-          gap: 2px;
+          display: flex; background: var(--color-surface-sunken); border: 1px solid var(--color-border);
+          border-radius: var(--radius-lg); padding: 3px; gap: 2px;
         }
         .period-btn {
-          border: none;
-          background: transparent;
-          padding: var(--space-2) var(--space-4);
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-medium);
-          color: var(--color-text-muted);
-          border-radius: var(--radius-md);
-          cursor: pointer;
-          transition: all var(--transition-fast);
+          border: none; background: transparent; padding: var(--space-2) var(--space-4);
+          font-size: var(--font-size-xs); font-weight: var(--font-weight-medium);
+          color: var(--color-text-muted); border-radius: var(--radius-md); cursor: pointer;
         }
-        .period-btn:hover { color: var(--color-text-primary); }
         .period-btn.active {
-          background: var(--color-surface);
-          color: var(--color-primary);
-          font-weight: var(--font-weight-bold);
-          box-shadow: var(--shadow-sm);
+          background: var(--color-surface); color: var(--color-primary);
+          font-weight: var(--font-weight-bold); box-shadow: var(--shadow-sm);
         }
-        .custom-date-inputs {
-          display: flex;
-          gap: var(--space-3);
-          align-items: center;
-        }
+        .custom-date-inputs { display: flex; gap: var(--space-3); align-items: center; }
 
-        /* KPI Cards */
-        .laporan-stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: var(--space-4);
-        }
+        .laporan-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
         .laporan-stat-card {
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-xl);
-          padding: var(--space-5);
-          display: flex;
-          align-items: center;
-          gap: var(--space-4);
-          box-shadow: var(--shadow-sm);
-          transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-        }
-        .laporan-stat-card:hover {
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-md);
+          background: var(--color-surface); border: 1px solid var(--color-border);
+          border-radius: var(--radius-xl); padding: var(--space-5);
+          display: flex; align-items: center; gap: var(--space-4); box-shadow: var(--shadow-sm);
         }
         .laporan-stat-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: var(--radius-lg);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.4rem;
-          flex-shrink: 0;
+          width: 48px; height: 48px; border-radius: var(--radius-lg);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.4rem; flex-shrink: 0;
         }
         .stat-icon--success { background: #ecfdf5; color: #059669; }
         .stat-icon--primary { background: var(--color-primary-subtle); color: var(--color-primary); }
         .stat-icon--info { background: #eff6ff; color: #2563eb; }
-        .stat-icon--warning { background: #fffbeb; color: #d97706; }
+        .stat-icon--warning { background: #fef3c7; color: #d97706; }
         .laporan-stat-content { flex: 1; min-width: 0; }
-        .laporan-stat-label {
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-bottom: 2px;
-        }
-        .laporan-stat-value {
-          font-size: var(--font-size-2xl);
-          font-weight: var(--font-weight-extrabold);
-          color: var(--color-text-primary);
-          line-height: var(--line-height-tight);
-        }
-        .laporan-stat-sub {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          margin-top: 2px;
-        }
+        .laporan-stat-label { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+        .laporan-stat-value { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); color: var(--color-text-primary); }
+        .laporan-stat-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
 
-        /* Tabs */
-        .laporan-tabs-wrapper {
-          border-bottom: 1px solid var(--color-border);
-        }
-        .laporan-tabs {
-          display: flex;
-          gap: var(--space-2);
-          overflow-x: auto;
-        }
+        .laporan-tabs-wrapper { border-bottom: 1px solid var(--color-border); }
+        .laporan-tabs { display: flex; gap: var(--space-4); }
         .tab-btn {
-          border: none;
-          background: transparent;
-          padding: var(--space-3) var(--space-5);
-          font-size: var(--font-size-sm);
-          font-weight: var(--font-weight-semibold);
-          color: var(--color-text-muted);
-          cursor: pointer;
-          border-bottom: 2px solid transparent;
-          transition: all var(--transition-fast);
-          white-space: nowrap;
+          border: none; background: transparent; padding: var(--space-3) var(--space-2);
+          font-size: var(--font-size-sm); font-weight: var(--font-weight-medium);
+          color: var(--color-text-muted); cursor: pointer; border-bottom: 2px solid transparent;
         }
-        .tab-btn:hover { color: var(--color-text-primary); }
-        .tab-btn.active {
-          color: var(--color-primary);
-          border-bottom-color: var(--color-primary);
-        }
+        .tab-btn.active { color: var(--color-primary); font-weight: var(--font-weight-bold); border-bottom-color: var(--color-primary); }
 
-        /* Chart */
-        .chart-card {
-          padding: var(--space-6);
-        }
-        .chart-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          margin-bottom: var(--space-6);
-        }
-        .chart-title {
-          font-size: var(--font-size-base);
-          font-weight: var(--font-weight-bold);
-          color: var(--color-text-primary);
-        }
-        .chart-sub {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          margin-top: 2px;
-        }
-        .chart-legend {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-        }
-        .legend-dot {
-          width: 10px;
-          height: 10px;
-          background: var(--color-primary);
-          border-radius: 2px;
-        }
+        .chart-card { padding: var(--space-6); }
+        .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-6); flex-wrap: wrap; gap: var(--space-2); }
+        .chart-title { font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+        .chart-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+        .chart-legend { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-muted); }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-primary); }
+
         .chart-bars-container {
-          display: flex;
-          align-items: flex-end;
-          gap: var(--space-3);
-          height: 220px;
-          padding-top: var(--space-4);
-          border-bottom: 1px solid var(--color-border);
+          display: flex; align-items: flex-end; justify-content: space-between;
+          height: 220px; gap: var(--space-3); padding-top: var(--space-4);
         }
-        .bar-column {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          height: 100%;
-        }
-        .bar-wrapper {
-          width: 100%;
-          max-width: 44px;
-          height: 100%;
-          display: flex;
-          align-items: flex-end;
-          justify-content: center;
-        }
+        .bar-column { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+        .bar-wrapper { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
         .bar-fill {
-          width: 100%;
-          background: var(--color-primary);
-          border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-          transition: height 0.4s ease;
-          position: relative;
-        }
-        .bar-fill:hover {
-          background: var(--color-primary-hover);
-        }
-        .bar-label {
-          font-size: 11px;
-          color: var(--color-text-muted);
-          margin-top: var(--space-2);
-          white-space: nowrap;
+          width: 70%; max-width: 36px; background: linear-gradient(to top, var(--color-primary), #4ade80);
+          border-radius: var(--radius-sm) var(--radius-sm) 0 0; position: relative;
+          transition: height 0.4s ease; min-height: 4px;
         }
         .bar-tooltip {
-          display: none;
-          position: absolute;
-          bottom: 105%;
-          left: 50%;
-          transform: translateX(-50%);
-          background: #1e293b;
-          color: #fff;
-          font-size: 10px;
-          padding: 2px 6px;
-          border-radius: var(--radius-sm);
-          white-space: nowrap;
+          position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+          font-size: 9px; font-weight: bold; color: var(--color-primary); white-space: nowrap;
         }
-        .bar-fill:hover .bar-tooltip {
-          display: block;
-        }
+        .bar-label { font-size: 10px; color: var(--color-text-muted); margin-top: var(--space-2); white-space: nowrap; }
 
-        /* Table */
-        .table-card { padding: 0; overflow: hidden; }
-        .table-responsive { overflow-x: auto; }
-        .laporan-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: var(--font-size-sm);
-        }
-        .laporan-table th {
-          background: var(--color-surface-sunken);
-          color: var(--color-text-muted);
-          font-size: var(--font-size-xs);
-          font-weight: var(--font-weight-bold);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: var(--space-3) var(--space-4);
-          border-bottom: 1px solid var(--color-border);
-          white-space: nowrap;
-        }
-        .laporan-table td {
-          padding: var(--space-4);
-          border-bottom: 1px solid var(--color-border);
-          vertical-align: middle;
-        }
-        .laporan-table tr:last-child td { border-bottom: none; }
-        .col-rank { font-size: 1.1rem; }
-        .kategori-tag {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          background: var(--color-surface-sunken);
-          border: 1px solid var(--color-border);
-          padding: 2px 8px;
-          border-radius: var(--radius-sm);
-        }
+        .kategori-progress-list { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4); }
+        .progress-label-row { display: flex; justify-content: space-between; font-size: var(--font-size-sm); margin-bottom: var(--space-1); }
+        .progress-bar-track { height: 8px; background: var(--color-surface-sunken); border-radius: var(--radius-full); overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--color-primary); border-radius: var(--radius-full); }
+        .fill--blue { background: #2563eb !important; }
+        .fill--amber { background: #d97706 !important; }
 
-        /* Progress List (Kategori) */
-        .section-title {
-          font-size: var(--font-size-base);
-          font-weight: var(--font-weight-bold);
-          color: var(--color-text-primary);
-          margin-bottom: var(--space-5);
-        }
-        .kategori-progress-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-4);
-        }
-        .kategori-progress-item {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-2);
-        }
-        .progress-label-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: var(--font-size-sm);
-        }
-        .cat-name { font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
-        .cat-stats strong { color: var(--color-primary); margin-right: 6px; }
-        .cat-sub { color: var(--color-text-muted); font-size: var(--font-size-xs); }
-        .progress-bar-track {
-          width: 100%;
-          height: 10px;
-          background: var(--color-surface-sunken);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-        .progress-bar-fill {
-          height: 100%;
-          background: var(--color-primary);
-          border-radius: var(--radius-full);
-          transition: width 0.4s ease;
-        }
-        .fill--blue { background: #2563eb; }
-
-        /* Metode Cards Grid */
-        .metode-cards-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-          gap: var(--space-5);
-        }
-        .metode-card {
-          padding: var(--space-6);
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-4);
-        }
-        .metode-card-top {
-          display: flex;
-          align-items: center;
-          gap: var(--space-4);
-        }
-        .metode-icon {
-          font-size: 2.2rem;
-        }
-        .metode-title {
-          font-size: var(--font-size-base);
-          font-weight: var(--font-weight-bold);
-          color: var(--color-text-primary);
-        }
-        .metode-trx-count {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-        }
-        .metode-amount {
-          font-size: var(--font-size-2xl);
-          font-weight: var(--font-weight-extrabold);
-          color: var(--color-primary);
-        }
-        .metode-progress-box {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-2);
-        }
-        .metode-share-text {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-muted);
-          font-weight: var(--font-weight-semibold);
-        }
-
-        @media (max-width: 768px) {
-          .laporan-header { flex-direction: column; align-items: stretch; }
-          .laporan-header-actions { width: 100%; }
-          .laporan-header-actions button { flex: 1; }
-          .controls-row { flex-direction: column; align-items: stretch; }
-          .period-pill-group { justify-content: space-around; }
-          .custom-date-inputs { flex-direction: column; }
-        }
+        .metode-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
+        .metode-card { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+        .metode-card-top { display: flex; align-items: center; gap: var(--space-3); }
+        .metode-icon { font-size: 1.8rem; }
+        .metode-title { font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); }
+        .metode-trx-count { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+        .metode-amount { font-size: var(--font-size-2xl); font-weight: var(--font-weight-extrabold); color: var(--color-text-primary); }
+        .metode-progress-box { display: flex; flex-direction: column; gap: var(--space-1); }
+        .metode-share-text { font-size: var(--font-size-xs); color: var(--color-text-muted); text-align: right; }
       `}</style>
     </div>
   )

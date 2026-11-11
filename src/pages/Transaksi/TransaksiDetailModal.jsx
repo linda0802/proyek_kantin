@@ -192,10 +192,21 @@ export default function TransaksiDetailModal({
 
             <div className="receipt-row" style={{ marginTop: '4px' }}>
               <span>Metode Pembayaran:</span>
-              <span style={{ textTransform: 'capitalize', fontWeight: '600' }}>
-                {isTunai ? '💵 Uang Tunai' : '📱 Non-Tunai (QRIS)'}
+              <span style={{ textTransform: 'capitalize', fontWeight: '600', color: transaksi.metodePembayaran === 'kasbon' ? '#b45309' : 'inherit' }}>
+                {isTunai
+                  ? '💵 Uang Tunai'
+                  : transaksi.metodePembayaran === 'kasbon'
+                  ? '📝 Kasbon / Hutang'
+                  : '📱 Non-Tunai (QRIS)'}
               </span>
             </div>
+
+            {transaksi.metodePembayaran === 'kasbon' && transaksi.pelanggan && (
+              <div className="receipt-row">
+                <span>Nama Pelanggan:</span>
+                <strong style={{ color: '#b45309' }}>👤 {transaksi.pelanggan}</strong>
+              </div>
+            )}
 
             {isTunai && (
               <>
