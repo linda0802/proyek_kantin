@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTransaksiContext } from '../../context/TransaksiContext'
+import { useProduk } from '../../context/ProdukContext'
+import { useTitipan } from '../../context/TitipanContext'
+import { useHutang } from '../../context/HutangContext'
+import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
@@ -13,6 +17,10 @@ import BatalTransaksiModal from './BatalTransaksiModal'
 
 export default function TransaksiPage() {
   const { transaksiList, batalkanTransaksi, summary } = useTransaksiContext()
+  const { kembalikanStokPembatalan } = useProduk()
+  const { kembalikanStokTitipan } = useTitipan()
+  const { batalkanHutangByTransaksi } = useHutang()
+  const { user } = useAuth()
   const { addToast } = useToast()
 
   // State Filters
@@ -102,11 +110,32 @@ export default function TransaksiPage() {
 
   // Handlers
   const handleConfirmBatal = (id, alasan) => {
+    const targetTrx = transaksiList.find(t => t.id === id)
     batalkanTransaksi(id, alasan)
+
+    if (targetTrx?.items && Array.isArray(targetTrx.items)) {
+      // 1. Kembalikan stok produk kantin & catat riwayat mutasi
+      kembalikanStokPembatalan(targetTrx.items, targetTrx.id, user?.name, alasan)
+
+      // 2. Kembalikan stok titipan jika pesanan mengandung produk titipan
+      targetTrx.items.forEach(item => {
+        const titipanId = item.titipanId || item.produk?.titipanId
+        const isTitipan = item.isTitipan || item.produk?.isTitipan
+        if (isTitipan && titipanId) {
+          kembalikanStokTitipan(titipanId, item.jumlah || 1)
+        }
+      })
+    }
+
+    // 3. Batalkan catatan hutang jika metode pembayarannya kasbon
+    if (targetTrx?.metodePembayaran === 'kasbon') {
+      batalkanHutangByTransaksi(targetTrx.id)
+    }
+
     addToast({
       type: 'warning',
       title: 'Transaksi Dibatalkan',
-      message: `Transaksi ${id} telah dibatalkan.`,
+      message: `Transaksi ${id} telah dibatalkan & stok dikembalikan ke sistem.`,
     })
   }
 

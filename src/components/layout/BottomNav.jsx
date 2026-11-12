@@ -1,18 +1,24 @@
+import { useMemo } from 'react'
 import { NavLink } from 'react-router-dom'
-
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: '📊', exact: true },
-  { to: '/kasir', label: 'Kasir', icon: '🛒' },
-  { to: '/transaksi', label: 'Transaksi', icon: '📋' },
-  { to: '/produk', label: 'Produk', icon: '📦' },
-  { to: '/pengaturan', label: 'Pengaturan', icon: '⚙️' },
-]
+import { useAuth } from '../../context/AuthContext'
 
 export default function BottomNav() {
+  const { isAdmin } = useAuth()
+
+  const navItems = useMemo(() => [
+    { to: '/', label: 'Dashboard', icon: '📊', exact: true },
+    { to: '/kasir', label: 'Kasir', icon: '🛒' },
+    { to: '/transaksi', label: 'Transaksi', icon: '📋' },
+    { to: '/produk', label: 'Produk', icon: '📦' },
+    isAdmin
+      ? { to: '/pengaturan', label: 'Pengaturan', icon: '⚙️' }
+      : { to: '/tutup-kas', label: 'Tutup Kas', icon: '💰' },
+  ], [isAdmin])
+
   return (
     <nav className="bottom-nav" role="navigation" aria-label="Navigasi bawah">
       <div className="bottom-nav__items">
-        {NAV_ITEMS.map(item => (
+        {navItems.map(item => (
           <NavLink
             key={item.to}
             to={item.to}

@@ -31,6 +31,7 @@ export function HutangProvider({ children }) {
    * Dipanggil otomatis dari POSPage saat metode = kasbon.
    */
   const tambahHutang = useCallback(({ transaksi, pelanggan, kasir }) => {
+    if (!transaksi || !transaksi.id) return null
     const maxId = hutangList.reduce((m, h) => Math.max(m, h.id), 0)
     const newHutang = {
       id: maxId + 1,
@@ -48,6 +49,14 @@ export function HutangProvider({ children }) {
     setHutangList(prev => [newHutang, ...prev])
     return newHutang
   }, [hutangList])
+
+  /**
+   * Batalkan catatan hutang berdasarkan nomor transaksi jika transaksi dibatalkan
+   */
+  const batalkanHutangByTransaksi = useCallback((nomorTransaksi) => {
+    setHutangList(prev => prev.filter(h => h.nomorTransaksi !== nomorTransaksi))
+    return { error: null }
+  }, [])
 
   /**
    * Tandai hutang sebagai lunas
@@ -109,6 +118,7 @@ export function HutangProvider({ children }) {
         tambahHutang,
         lunasiHutang,
         hapusHutang,
+        batalkanHutangByTransaksi,
         editHutang,
         metrics,
       }}

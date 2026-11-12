@@ -99,6 +99,19 @@ export function TitipanProvider({ children }) {
     )
   }, [])
 
+  // Kembalikan stok titipan saat transaksi dibatalkan
+  const kembalikanStokTitipan = useCallback((titipanId, jumlah) => {
+    setTitipanList(prev =>
+      prev.map(item => {
+        if (item.id === titipanId) {
+          const terjualBaru = Math.max(0, item.terjual - (jumlah || 1))
+          return { ...item, terjual: terjualBaru }
+        }
+        return item
+      })
+    )
+  }, [])
+
   // Produk titipan yang masih tersedia (stok > 0)
   const produkTitipanTersedia = useMemo(() => {
     return titipanList
@@ -153,6 +166,7 @@ export function TitipanProvider({ children }) {
         toggleStatusBayar,
         hapusTitipan,
         kurangiStokTitipan,
+        kembalikanStokTitipan,
         produkTitipanTersedia,
         metrics,
       }}

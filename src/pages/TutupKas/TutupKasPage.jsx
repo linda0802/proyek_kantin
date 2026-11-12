@@ -67,17 +67,20 @@ export default function TutupKasPage() {
 
     let penjualanTunai = 0
     let penjualanNonTunai = 0
+    let penjualanKasbon = 0
     let totalTransaksi = trxHariIni.length
 
     trxHariIni.forEach(t => {
       if (t.metodePembayaran === 'tunai') {
         penjualanTunai += t.total
+      } else if (t.metodePembayaran === 'kasbon') {
+        penjualanKasbon += t.total
       } else {
         penjualanNonTunai += t.total
       }
     })
 
-    const totalOmzet = penjualanTunai + penjualanNonTunai
+    const totalOmzet = penjualanTunai + penjualanNonTunai + penjualanKasbon
     const modalAwalNum = parseInt(modalAwal, 10) || 0
     const kasSeharusnya = modalAwalNum + penjualanTunai
 
@@ -87,6 +90,7 @@ export default function TutupKasPage() {
     return {
       penjualanTunai,
       penjualanNonTunai,
+      penjualanKasbon,
       totalOmzet,
       modalAwalNum,
       kasSeharusnya,
@@ -114,6 +118,7 @@ export default function TutupKasPage() {
         modalAwal: shiftMetrics.modalAwalNum,
         penjualanTunai: shiftMetrics.penjualanTunai,
         penjualanNonTunai: shiftMetrics.penjualanNonTunai,
+        penjualanKasbon: shiftMetrics.penjualanKasbon,
         totalOmzet: shiftMetrics.totalOmzet,
         kasSeharusnya: shiftMetrics.kasSeharusnya,
         uangFisik: shiftMetrics.fisikNum,
@@ -195,6 +200,7 @@ export default function TutupKasPage() {
               modalAwal: shiftMetrics.modalAwalNum,
               penjualanTunai: shiftMetrics.penjualanTunai,
               penjualanNonTunai: shiftMetrics.penjualanNonTunai,
+              penjualanKasbon: shiftMetrics.penjualanKasbon,
               totalOmzet: shiftMetrics.totalOmzet,
               kasSeharusnya: shiftMetrics.kasSeharusnya,
               uangFisik: shiftMetrics.fisikNum || shiftMetrics.kasSeharusnya,
@@ -238,6 +244,17 @@ export default function TutupKasPage() {
               {formatRupiah(shiftMetrics.penjualanNonTunai)}
             </div>
             <div className="tutup-stat-sub">QRIS / Rekening bank</div>
+          </div>
+        </div>
+
+        <div className="tutup-stat-card">
+          <div className="tutup-stat-icon stat-icon--warning" aria-hidden="true">📝</div>
+          <div className="tutup-stat-content">
+            <div className="tutup-stat-label">Penjualan Kasbon</div>
+            <div className="tutup-stat-value" style={{ color: '#b45309' }}>
+              {formatRupiah(shiftMetrics.penjualanKasbon)}
+            </div>
+            <div className="tutup-stat-sub">Piutang belum lunas</div>
           </div>
         </div>
 
@@ -484,6 +501,12 @@ export default function TutupKasPage() {
                 <span>Penjualan Non-Tunai:</span>
                 <span>Rp {selectedForPrint.penjualanNonTunai?.toLocaleString('id-ID')}</span>
               </div>
+              {selectedForPrint.penjualanKasbon > 0 && (
+                <div className="slip-row">
+                  <span>Penjualan Kasbon:</span>
+                  <span>Rp {selectedForPrint.penjualanKasbon?.toLocaleString('id-ID')}</span>
+                </div>
+              )}
               <div className="slip-row slip-total">
                 <span>Total Omzet Shift:</span>
                 <span>Rp {selectedForPrint.totalOmzet?.toLocaleString('id-ID')}</span>

@@ -271,7 +271,6 @@ export default function ProdukPage() {
                 <option value="nama-desc">Nama (Z - A)</option>
                 <option value="harga-desc">Harga Tertinggi</option>
                 <option value="harga-asc">Harga Terendah</option>
-                <option value="laba-desc">Margin Laba Tertinggi</option>
                 <option value="stok-desc">Stok Terbanyak</option>
                 <option value="stok-asc">Stok Tersedikit</option>
               </Select>
@@ -360,7 +359,6 @@ export default function ProdukPage() {
                   <th>Kategori</th>
                   <th style={{ textAlign: 'right' }}>Harga Jual</th>
                   <th style={{ textAlign: 'right' }}>Harga Modal</th>
-                  <th style={{ textAlign: 'right' }}>Est. Margin</th>
                   <th style={{ textAlign: 'center' }}>Stok</th>
                   <th style={{ textAlign: 'center' }}>Status</th>
                   <th style={{ textAlign: 'center', width: '130px' }}>Aksi</th>
@@ -369,8 +367,6 @@ export default function ProdukPage() {
               <tbody>
                 {filteredProduk.map((p, index) => {
                   const kategoriNama = getNamaKategori(p.kategoriId)
-                  const laba = p.hargaJual - p.hargaModal
-                  const marginPct = p.hargaJual > 0 ? Math.round((laba / p.hargaJual) * 100) : 0
                   const isHabis = p.status === 'habis' || p.stok === 0
                   const isStokKritis = !isHabis && p.stok <= 5
 
@@ -398,14 +394,6 @@ export default function ProdukPage() {
                       </td>
                       <td style={{ textAlign: 'right', color: 'var(--color-text-muted)' }}>
                         {formatRupiah(p.hargaModal)}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ color: laba >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 'var(--font-weight-semibold)' }}>
-                          +{formatRupiah(laba)}
-                        </div>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                          {marginPct}% margin
-                        </div>
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {p.stok === 0 ? (
@@ -464,8 +452,6 @@ export default function ProdukPage() {
         <div className="produk-cards-grid" id="produk-cards-grid">
           {filteredProduk.map(p => {
             const kategoriNama = getNamaKategori(p.kategoriId)
-            const laba = p.hargaJual - p.hargaModal
-            const marginPct = p.hargaJual > 0 ? Math.round((laba / p.hargaJual) * 100) : 0
             const isHabis = p.status === 'habis' || p.stok === 0
             const isStokKritis = !isHabis && p.stok <= 5
 
@@ -498,9 +484,9 @@ export default function ProdukPage() {
                       <div className="produk-card-price">{formatRupiah(p.hargaJual)}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div className="produk-card-label">Modal / Laba</div>
-                      <div className="produk-card-laba">
-                        +{formatRupiah(laba)} <span className="margin-tag">({marginPct}%)</span>
+                      <div className="produk-card-label">Harga Modal</div>
+                      <div className="produk-card-price" style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                        {formatRupiah(p.hargaModal)}
                       </div>
                     </div>
                   </div>

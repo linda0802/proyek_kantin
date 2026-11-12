@@ -296,6 +296,59 @@ export function ProdukProvider({ children }) {
     }
   }, [])
 
+  // Pengembalian Stok Otomatis saat Transaksi Dibatalkan (HANYA PRODUK KANTIN)
+  const kembalikanStokPembatalan = useCallback((items, nomorTransaksi, petugas, alasan) => {
+    if (!items || !Array.isArray(items)) return
+
+    // Kembalikan stok produk kantin
+    setProdukList(prev =>
+      prev.map(p => {
+        const itemBatal = items.find(i => {
+          const id = i.produkId ?? i.produk?.id
+          const isTitipan = i.isTitipan || i.produk?.isTitipan
+          return id === p.id && !isTitipan
+        })
+
+        if (itemBatal) {
+          const qty = itemBatal.jumlah || 1
+          const stokBaru = p.stok + qty
+          return {
+            ...p,
+            stok: stokBaru,
+            status: stokBaru > 0 ? (p.status === 'habis' ? 'tersedia' : p.status) : 'habis',
+          }
+        }
+        return p
+      })
+    )
+
+    // Catat mutasi masuk akibat pembatalan
+    const mutasiMasuk = items
+      .filter(i => !(i.isTitipan || i.produk?.isTitipan))
+      .map((item, idx) => {
+        const pId = item.produkId ?? item.produk?.id
+        const pNama = item.nama ?? item.produk?.nama
+        const pStok = item.produk?.stok ?? 0
+        const qty = item.jumlah || 1
+        return {
+          id: `MUT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now() + idx).slice(-3)}`,
+          tanggal: new Date().toISOString(),
+          produkId: pId,
+          namaProduk: pNama,
+          tipe: 'masuk',
+          jumlah: qty,
+          stokSebelum: pStok,
+          stokSesudah: pStok + qty,
+          keterangan: `Batal Transaksi (${nomorTransaksi || 'TRX'})${alasan ? `: ${alasan}` : ''}`,
+          petugas: petugas || 'Kasir',
+        }
+      })
+
+    if (mutasiMasuk.length > 0) {
+      setMutasiList(prev => [...mutasiMasuk, ...prev])
+    }
+  }, [])
+
   return (
     <ProdukContext.Provider
       value={{
@@ -314,6 +367,7 @@ export function ProdukProvider({ children }) {
         tambahStokMasuk,
         sesuaikanStok,
         kurangiStokPenjualan,
+        kembalikanStokPembatalan,
       }}
     >
       {children}
